@@ -6,7 +6,9 @@
 
 A Power Apps **Code App** (React + TypeScript) embedded in a Model-Driven App, backed by Microsoft Dataverse. The product is a configurable, multi-level **Assessment Module** — assessors run structured checklists against reusable templates, capture evidence, auto-evaluate outcomes, and generate outcome letters.
 
-The detailed product spec is summarized in [purrfect-questing-neumann.md](../../../.claude/plans/purrfect-questing-neumann.md) (also pasted into the original PRD PDF the user attached on 2026-05-23).
+The detailed product spec lives in two places:
+- **PRD** — the original PDF the user attached on 2026-05-23 (also summarised in the personal plan file outside the repo).
+- **`design.md`** at the repo root — the UI design specification we're now matching. Flat aesthetic, 0.5 px borders, no shadows, no gradients, purple (`#7F77DD`) brand.
 
 ## Where we are right now
 
@@ -14,9 +16,11 @@ The detailed product spec is summarized in [purrfect-questing-neumann.md](../../
 |---|---|---|
 | **M0** Environment & foundations | ✅ done (by user) | Dataverse env provisioned, schemas synced to `.power/schemas/dataverse/` |
 | **M1** Dataverse schema | ✅ done (by user) | All 10 entities present; generated TS services in `src/generated/` |
-| **M2** App shell, auth, routing | ✅ done | Custom indigo theme, dark gradient sidebar, glass topbar |
-| **M3** Template tree editor | ⏳ next | Top-level Templates CRUD shipped; Section/Subsection/Question tree pending |
-| **M4** Assessment runtime | not started | |
+| **M2** App shell, auth, routing | ✅ done | Custom purple theme, 52 px sticky topbar, flat surfaces per `design.md` |
+| **M3a** Template tree editor — CRUD | ✅ done | Section / Subsection / Question authoring with inline custom option sets |
+| **M3b** Drag-reorder | ⏳ next | Needs `@dnd-kit/core`; will update `dnx_assessment_level_order` on drop |
+| **M3c** Conditional visibility editor | not started | Show a question only when a parent answer matches; needs storage decision |
+| **M4** Assessment runtime | not started | Checklist renderer, autosave, conditional logic at runtime |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
 | **M7** Rule engine & scoring | not started | |
@@ -25,17 +29,19 @@ The detailed product spec is summarized in [purrfect-questing-neumann.md](../../
 
 ## Currently working features
 
-- **Projects** — full CRUD (list, detail, create, edit, delete) wired to `Dnx_projectsService`. Indigo gradient hero, status pills (Active / On Hold / Archived).
-- **Templates** — full CRUD on top-level template records (`Dnx_assessment_templatesService`). Indigo→pink gradient hero, lifecycle status (Draft / Published / Deprecated), **Publish** action that bumps version + stamps `dnx_published_on`. Tree editor placeholder card below the overview.
-- **Dashboard** — placeholder stat tiles (counts are `—` until M8).
-- **App shell** — sidebar nav (Dashboard / Projects / Templates), sticky glass topbar, user chip in sidebar footer.
+- **Projects** — full CRUD (list, detail, create, edit, delete) wired to `Dnx_projectsService`. Flat cards with status pills (Active / On Hold / Archived / Inactive).
+- **Templates** — full CRUD on top-level template records (`Dnx_assessment_templatesService`). Lifecycle status (Draft / Published / Deprecated), **Publish** action that bumps version + stamps `dnx_published_on` (uses `Edm.Date` format, see gotcha B).
+- **Template tree editor** — Section → Subsection → Question authoring under each template via `Dnx_assessment_levelsService`. Contextual add menus respect the allowed-children rules. Question fields support all 5 data types (Boolean / Option set single / Option set multi / Text / Date) with inline custom option sets stored as JSON in `dnx_option_set_reference`. Required flag + Include-in-letter flag (purple dot in tree) + hint text + document-type reference. Cascade-delete walks the subtree depth-first.
+- **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
+- **Assessments** — list page is a stub at `/assessments`; detail page (`/assessments/:id`) is also a stub until M4.
+- **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
 
 ## Stack
 
 - **React 19** + **TypeScript** + **Vite 7**
 - **@microsoft/power-apps** SDK (v1.0.3) — auto-generated typed services for every Dataverse table
 - **@microsoft/power-apps-vite** plugin — handles auth/dev-server integration
-- **Fluent UI React v9** — components for accessibility, heavily re-themed (see Conventions below)
+- **Fluent UI React v9** — accessible primitives, heavily re-themed (see Design language below)
 - **@tanstack/react-query** — server-state + cache invalidation pattern
 - **react-router-dom v7** — routing
 - **@fluentui/react-icons** — iconography
@@ -44,25 +50,28 @@ The detailed product spec is summarized in [purrfect-questing-neumann.md](../../
 
 ```
 intelliassessment-v1/
-├── .power/schemas/dataverse/     # Dataverse table schemas (synced via pac code)
+├── .power/schemas/dataverse/         # Dataverse table schemas (synced via pac code)
+├── design.md                         # UI design spec — flat aesthetic, color tokens
 ├── src/
-│   ├── generated/                # Auto-generated by pac code add-data-source
-│   │   ├── models/               # Type-only interfaces for each table
-│   │   └── services/             # CRUD services (Service.create/get/getAll/update/delete)
+│   ├── generated/                    # Auto-generated by pac code add-data-source
+│   │   ├── models/                   # Type-only interfaces for each table
+│   │   └── services/                 # CRUD services
 │   ├── features/
-│   │   ├── projects/             # Projects CRUD
-│   │   ├── templates/            # Templates CRUD (level 0 only — tree editor pending)
-│   │   ├── assessments/          # Stub for M4
-│   │   └── dashboard/            # Stub tiles
-│   ├── layout/AppLayout.tsx      # Sidebar + topbar shell
+│   │   ├── projects/                 # Projects CRUD
+│   │   ├── templates/                # Templates CRUD
+│   │   │   └── levels/               # Tree editor (M3a)
+│   │   ├── assessments/              # Stubs for M4 (list + detail)
+│   │   └── dashboard/                # Stub tiles + outcome breakdown
+│   ├── layout/AppLayout.tsx          # 52 px topbar shell
 │   ├── lib/
-│   │   ├── theme.ts              # Custom Fluent indigo theme override
-│   │   └── queryClient.ts        # Shared React Query client
-│   ├── App.tsx                   # Router
-│   ├── main.tsx                  # Providers (FluentProvider, QueryClient, BrowserRouter)
-│   └── index.css                 # Inter font, CSS variables, reset
-├── power.config.json             # Code App config (appId, environmentId)
-└── vite.config.ts                # Vite + powerApps plugin
+│   │   ├── theme.ts                  # Custom Fluent purple theme override (shadows: none)
+│   │   ├── dataverse.ts              # lookupName() / lookupId() helpers (see gotcha G)
+│   │   └── queryClient.ts            # Shared React Query client
+│   ├── App.tsx                       # Router
+│   ├── main.tsx                      # Providers (FluentProvider, QueryClient, BrowserRouter)
+│   └── index.css                     # Inter font, design.md CSS variables, reset
+├── power.config.json                 # Code App config (appId, environmentId)
+└── vite.config.ts                    # Vite + powerApps plugin
 ```
 
 ## Architecture patterns (established — keep doing this)
@@ -71,13 +80,13 @@ intelliassessment-v1/
 
 For each domain entity, the folder contains:
 
-- `api.ts` — query keys, query hooks (`use<Entity>s`, `use<Entity>`), mutation hooks (`useCreate<Entity>`, `useUpdate<Entity>`, `useDelete<Entity>`). React Query owns cache; mutations invalidate list, write back to detail.
-- `<Entity>FormFields.tsx` — shared form fields used by both Create and Edit dialogs. Exports `STATUS_TO_CODE` and `CODE_TO_STATUS` maps for Dataverse option set codes.
-- `New<Entity>Dialog.tsx` — Fluent Dialog wrapping the shared form, calls Create mutation, navigates to detail page on success.
-- `Edit<Entity>Dialog.tsx` — same form, prefills via `onOpenChange` (not `useEffect` — see gotchas).
-- `Delete<Entity>Dialog.tsx` — destructive confirm with red gradient mark.
+- `api.ts` — query keys, query hooks (`use<Entity>s`, `use<Entity>`), mutation hooks (`useCreate<Entity>`, `useUpdate<Entity>`, `useDelete<Entity>`). React Query owns cache; mutations invalidate list, write back to detail via `setQueryData`.
+- `<Entity>FormFields.tsx` — shared form fields used by both Create and Edit dialogs.
+- `New<Entity>Dialog.tsx` / `Edit<Entity>Dialog.tsx` / `Delete<Entity>Dialog.tsx` — Fluent Dialog wrapping the shared form.
 - `<Entity>sPage.tsx` — list grid.
-- `<Entity>EditorPage.tsx` or `<Entity>DetailPage.tsx` — detail with hero + Edit/Delete actions.
+- `<Entity>DetailPage.tsx` / `<Entity>EditorPage.tsx` — detail with hero + Edit/Delete actions.
+
+For nested entities (e.g. levels under a template) use a sub-folder pattern: `features/templates/levels/` contains `api.ts`, `treeBuilder.ts` (pure tree functions), `LevelTree.tsx` (container), `LevelTreeNode.tsx` (recursive row), shared dialogs.
 
 ### 2. Mutation pattern (per Microsoft's CRUD docs)
 
@@ -85,24 +94,30 @@ When creating: **exclude primary key + ownership fields** (`ownerid`, `owneridty
 
 When updating: send **only changed (editable) fields** — sending unchanged values would trigger business rules / corrupt audit logs.
 
-### 3. Visual design language
+When setting lookups: use the `@odata.bind` annotation with the **SchemaName-cased** key (not lowercase logical name). See gotcha K.
 
-- **Typography:** Inter variable font, weight 450/500/600/700, tight tracking (`-0.025em` for titles).
-- **Color tokens** in `src/index.css` as `--app-*` CSS variables.
-- **Cards:** white surface, soft 1 px border, `--app-shadow-card` resting → `--app-shadow-lift` (indigo glow) on hover, lift `translateY(-3px)`.
-- **Status pills:** `display: inline-flex`, `gap: 6px`, colored dot + label. Color scheme by semantic (success green, warning amber, danger red, neutral slate).
-- **Dialog headers:** custom gradient mark (40×40) + title/sub copy, no `DialogTitle`. Surface `borderRadius: 18px`, `maxWidth: 520px`.
-- **Gradient marks** per action archetype:
-  - Create / primary brand → `linear-gradient(135deg, #6366f1 0%, #a855f7 100%)`
-  - Templates (create) → `linear-gradient(135deg, #6366f1 0%, #ec4899 100%)`
-  - Edit → `linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)`
-  - Delete / warning → `linear-gradient(135deg, #ef4444 0%, #f97316 100%)`
+### 3. Visual design language (per `design.md`)
+
+- **Typography:** Inter variable font, weights 400 / 500 only (no bold). Type ramp: 18 px page titles, 14 px card headings, 13 px body, 11–12 px labels/meta. Sentence case everywhere — no Title Case in prose.
+- **Color tokens** in `src/index.css` as `--color-*` CSS variables:
+  - Surfaces: `--color-background-{primary,secondary,tertiary}` (white / `#f5f5f4` / `#fafaf9`)
+  - Text: `--color-text-{primary,secondary,tertiary}` (`#1a1a1a` / `#56565a` / `#888780`)
+  - Borders: `--color-border-tertiary` (rgba 0.08) / `--color-border-secondary` (rgba 0.16)
+  - Categorical (each with `-soft` and `-text` variants): `--color-{purple,green,amber,red,blue,teal,gray}`
+- **Cards:** `--color-background-primary` surface, `0.5px solid --color-border-tertiary`, `border-radius: 12px`. Card header with bottom border + 14 / 18 px padding; card body 18 px padding. **No box-shadow, no gradients.** Hover swaps to `--color-background-secondary`.
+- **Status pills:** `inline-flex`, `padding: 3px 8px`, `border-radius: 20px` (pill). Soft background + dark text from the matching `--color-{semantic}-{soft,text}` pair.
+- **Dialog headers:** custom solid-color **soft icon chip** (32×32, `border-radius: 8px`) + 14 px medium title + 12 px sub. Chip color per action archetype:
+  - Create → `--color-purple-soft` / `--color-purple-text`
+  - Edit → `--color-blue-soft` / `--color-blue-text`
+  - Delete → `--color-red-soft` / `--color-red-text`
+- **Dialog surface:** `border-radius: 12px`, `max-width: 480–560 px` depending on form length, `width: 92vw` on mobile. Field gap: 20 px.
+- **Global Fluent flattening** in `index.css` — kills `box-shadow` on Input/Textarea/Dropdown/SpinButton globally and replaces the default brand-blue focus underline with `--color-purple`.
 
 ## Gotchas & lessons learned (don't relearn these)
 
 ### A. Edit dialogs: never use `useEffect` to prefill state from props
 
-`useMutation` returns a **new object reference on every render**, so listing it in a `useEffect` deps array causes the effect to re-run on every keystroke, clobbering in-flight edits. **Instead, prefill in an `onOpenChange` handler** — runs once on the closed→open transition only.
+`useMutation` returns a **new object reference on every render**, so listing it in a `useEffect` deps array causes the effect to re-run on every keystroke, clobbering in-flight edits. **Prefill in an `onOpenChange` handler** — runs once on the closed→open transition only.
 
 ```tsx
 function handleOpenChange(next: boolean) {
@@ -116,15 +131,15 @@ function handleOpenChange(next: boolean) {
 
 ### B. Dataverse `DateTimeType` may actually be `Edm.Date`
 
-The schema JSON labels `dnx_published_on` as `DateTimeType`, but the column was configured with **Date Only** behavior in Dataverse. OData enforces `Edm.Date` literal format: must send `YYYY-MM-DD`, not full ISO `YYYY-MM-DDTHH:mm:ss.sssZ`. Use `new Date().toISOString().slice(0, 10)` for date-only fields. The error message `Cannot convert the literal '...' to the expected type 'Edm.Date'` is the tell.
+The schema JSON labels `dnx_published_on` as `DateTimeType`, but the column was configured with **Date Only** behavior in Dataverse. OData enforces `Edm.Date` literal format: must send `YYYY-MM-DD`, not full ISO. Use `new Date().toISOString().slice(0, 10)` for date-only fields. The error message `Cannot convert the literal '...' to the expected type 'Edm.Date'` is the tell.
 
 ### C. Griffel `makeStyles` rejects shorthand `borderColor` in nested selectors
 
-Inside `:hover { ... }` blocks, `borderColor: '...'` errors with `Type 'string' is not assignable to type 'undefined'`. Use the full `border: '1px solid ...'` shorthand instead.
+Inside `:hover { ... }` blocks, `borderColor: '...'` errors with `Type 'string' is not assignable to type 'undefined'`. Use the full `border: '0.5px solid ...'` shorthand instead.
 
 ### D. Fluent `DialogSurface` already has 24 px padding
 
-Don't override with custom `padding` — it shrinks the inner content area and makes inputs touch the rounded edges. If you need a tighter feel, use `borderRadius`, `maxWidth`, `width` only.
+Don't override with custom `padding` — it shrinks the inner content area and makes inputs touch the rounded edges. Use `borderRadius`, `maxWidth`, `width` only.
 
 ### E. Cast around required ownership fields on create
 
@@ -136,9 +151,9 @@ Generated services use `getClient(dataSourcesInfo)` internally — no `<PowerPro
 
 ### G. Lookup display names live on the OData annotation key, NOT the typed field
 
-The generated `<Entity>` interfaces include fields like `owneridname: string`, `createdbyname?: string` — but at runtime **the SDK does not flatten the OData annotation onto those typed fields**. Instead the display value lives on the raw key `_<lookup>_value@OData.Community.Display.V1.FormattedValue` and the GUID on `_<lookup>_value`.
+The generated `<Entity>` interfaces include fields like `owneridname: string`, `createdbyname?: string` — but at runtime **the SDK does not flatten the OData annotation onto those typed fields**. The display value lives on the raw key `_<lookup>_value@OData.Community.Display.V1.FormattedValue` and the GUID on `_<lookup>_value`.
 
-Use the helper in `src/lib/dataverse.ts`:
+Use the helpers in `src/lib/dataverse.ts`:
 ```ts
 import { lookupName, lookupId } from '../../lib/dataverse';
 
@@ -149,6 +164,45 @@ lookupId(project, 'ownerid');      // "01e47fe3-aecd-ef11-b8e8-7c1e522b249e"
 ```
 
 Do **not** read `record.owneridname` / `record.createdbyname` directly — they're typed as present but undefined at runtime. The SDK *does* request `odata.include-annotations=*` so the data is always there, just at the awkward key.
+
+### H. Inline `<span>` ignores width/height
+
+For decorative dots / dividers (e.g. the purple "include in letter" indicator), the `<span>` element defaults to `display: inline` which ignores `width` and `height`. Always set `display: inline-block` (or use a `<div>`/flex parent) on dot-like decorations.
+
+### I. Reset native `<button>` chrome when using bare buttons for icon actions
+
+Tight 18–20 px icon buttons need explicit `background: transparent; border: none; padding: 0` — otherwise the browser's default button background + bevel + padding clips or hides the SVG icon inside. The chevron expand/collapse on the tree was invisible until this reset was applied. The other icon buttons in the codebase (`iconBtn` class) already follow this pattern.
+
+### J. Fluent `<Field required>` propagates `required` to child `<Input>` via context
+
+If you wrap a complex composite (e.g. a chip editor with an internal draft input) in `<Field required>`, Fluent will mark the inner `<Input>` as `required` via context. Submitting with the draft field empty (even when the actual data is present elsewhere) triggers the browser's HTML5 validation popup.
+
+**Fix:** drop `required` from the Field; enforce the rule via the disabled state on the submit button instead.
+
+### K. Dataverse lookups use `@odata.bind` with SchemaName casing
+
+To create/update a record with a lookup field, send the navigation property using the **SchemaName-cased** key and the `@odata.bind` annotation. Note the casing: it's NOT the lowercase logical name.
+
+```ts
+const record = {
+  dnx_name: 'Qualification Section',
+  // SchemaName-cased + @odata.bind + entity-set path
+  'dnx_Assessment_Template@odata.bind': `/dnx_assessment_templates(${templateId})`,
+  'dnx_Parent_Assessment_Level@odata.bind': `/dnx_assessment_levels(${parentId})`,
+};
+```
+
+The generated `<Entity>Base` interface includes the `"<SchemaName>@odata.bind"?: string` field for each lookup — use that as a hint for the right key.
+
+### L. Custom option sets stored as JSON in an existing text column
+
+`dnx_assessment_levels.dnx_option_set_reference` was originally designed to hold a Dataverse choice logical name, but assessment authors often want inline custom option lists. We re-use the same text column to store a JSON-encoded array of label strings:
+
+```text
+["Yes","No","Not applicable"]
+```
+
+No schema change needed. Use `parseOptions(stored)` / `serializeOptions(arr)` from `features/templates/levels/options.ts`. Legacy plain-text values fall back to a single-entry list so existing data still loads.
 
 ## Dataverse entity reference (publisher prefix `dnx_`)
 
@@ -167,22 +221,25 @@ Do **not** read `record.owneridname` / `record.createdbyname` directly — they'
 
 Each table has a generated TS interface at `src/generated/models/Dnx_xxxModel.ts` and service at `src/generated/services/Dnx_xxxService.ts`. **Treat both folders as build artifacts** — regenerate via `pac code add-data-source` if the schema changes.
 
-### Common status codes
+### Common option-set codes
 
 - **Projects** `statuscode`: `1` Active · `2` Inactive · `778540001` Archived · `778540002` OnHold
 - **Templates** `statuscode`: `1` Active · `2` Inactive · `778540001` Draft · `778540002` Published · `778540003` Deprecated
 - **Assessment Instances** `statuscode`: `1` Active · `2` Inactive · `778540001` Draft · `778540002` InProgress · `778540003` PendingReview · `778540004` Complete
+- **Assessment Levels** `dnx_assessment_level_type`: `0` Root · `1` Section · `2` Subsection · `3` Question
+- **Assessment Levels** `dnx_data_type`: `0` Boolean · `1` OptionSet · `2` Multiselect · `3` Text · `4` Date
 
 ## Routes
 
 ```
-/                         → redirects to /dashboard
-/dashboard                → DashboardPage (stub tiles)
-/projects                 → ProjectsPage (list)
-/projects/:projectId      → ProjectDetailPage
-/templates                → TemplatesPage (list)
-/templates/:templateId/edit  → TemplateEditorPage (overview + Publish, tree editor pending)
-/assessments/:assessmentId   → AssessmentPage (stub)
+/                              → redirects to /dashboard
+/dashboard                     → DashboardPage (stub tiles + outcome breakdown)
+/projects                      → ProjectsPage (list)
+/projects/:projectId           → ProjectDetailPage
+/templates                     → TemplatesPage (list)
+/templates/:templateId/edit    → TemplateEditorPage (overview + Publish + tree editor)
+/assessments                   → AssessmentsListPage (stub for M4)
+/assessments/:assessmentId     → AssessmentPage (stub for M4)
 ```
 
 ## Running locally
@@ -198,15 +255,13 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-The natural next step is **Milestone 3: Template Tree Editor**. Tasks:
+The tree editor (M3a) is complete. Two natural next steps, in order of value:
 
-1. Build `useAssessmentLevels(templateId)` query hook reading `dnx_assessment_levels` filtered by `dnx_template` lookup.
-2. Build a recursive `<LevelNode>` component that renders Root → Section → Subsection → Question with type-specific question editors (Boolean / OptionSet / MultiSelect / Text / Date).
-3. Add drag-reorder using `@dnd-kit/core` (already a planned dep, not yet installed).
-4. Section / Subsection / Question CRUD on the `dnx_assessment_levels` table (same pattern as Projects/Templates).
-5. Conditional logic editor — let a question's visibility depend on a parent question's answer (PRD §2.2).
+1. **M3b — Drag-reorder.** Install `@dnd-kit/core` and `@dnd-kit/sortable`. Make sibling levels draggable within their parent bucket (Section reordering within the template; Subsection reordering within a Section; Question reordering within a Section or Subsection). On drop, fire a batched update that recomputes `dnx_assessment_level_order` for the affected siblings. Cross-parent moves are nice-to-have but not required for v1.
 
-The placeholder card on `TemplateEditorPage` already marks where this goes.
+2. **M3c — Conditional visibility editor.** Let a question declare "show only when parent question X = value Y". Needs a storage decision — likely a new JSON column on `dnx_assessment_levels` (e.g. `dnx_visibility_condition` as text), or fold into `dnx_description` as JSON. Then a small `<VisibilityRuleEditor>` in the LevelDialog under a collapsible "Visibility" group, plus a parser ready for the runtime evaluator in M4.
+
+Alternative if the user wants to see end-to-end value sooner: jump to **M4 (Assessment Runtime)** — render the template tree as a fillable checklist with per-data-type input components and autosave to `dnx_assessment_responses`. Drag-reorder and conditional logic can come back later.
 
 ## Useful links
 
