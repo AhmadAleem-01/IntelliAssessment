@@ -1,0 +1,26 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AppLayout } from './layout/AppLayout';
+import { ProjectsPage } from './features/projects/ProjectsPage';
+import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
+import { TemplatesPage } from './features/templates/TemplatesPage';
+import { TemplateEditorPage } from './features/templates/TemplateEditorPage';
+import { AssessmentPage } from './features/assessments/AssessmentPage';
+import { DashboardPage } from './features/dashboard/DashboardPage';
+
+function App() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/templates/:templateId/edit" element={<TemplateEditorPage />} />
+        <Route path="/assessments/:assessmentId" element={<AssessmentPage />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;

@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "appId": null,
+  "appDisplayName": "IntelliAssessment V1",
+  "region": "prod",
+  "environmentId": "ea150133-851d-e2e0-a3c7-7fc91b06bac8",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "projects": {
+          "entitySetName": "dnx_projects",
+          "logicalName": "dnx_project"
+        },
+        "assessmenttemplates": {
+          "entitySetName": "dnx_assessment_templates",
+          "logicalName": "dnx_assessment_template"
+        },
+        "assessmentinstances": {
+          "entitySetName": "dnx_assessment_instances",
+          "logicalName": "dnx_assessment_instance"
+        },
+        "assessmentlevels": {
+          "entitySetName": "dnx_assessment_levels",
+          "logicalName": "dnx_assessment_level"
+        },
+        "assessmentresponses": {
+          "entitySetName": "dnx_assessment_responses",
+          "logicalName": "dnx_assessment_response"
+        },
+        "evaluationcriteria": {
+          "entitySetName": "dnx_evaluationcriterias",
+          "logicalName": "dnx_evaluationcriteria"
+        },
+        "scoringgroups": {
+          "entitySetName": "dnx_scoring_groups",
+          "logicalName": "dnx_scoring_group"
+        },
+        "evidencefiles": {
+          "entitySetName": "dnx_evidence_files",
+          "logicalName": "dnx_evidence_file"
+        },
+        "assessmentversions": {
+          "entitySetName": "dnx_assessment_versions",
+          "logicalName": "dnx_assessment_version"
+        },
+        "reviewercomments": {
+          "entitySetName": "dnx_reviewer_comments",
+          "logicalName": "dnx_reviewer_comment"
+        },
+        "employees": {
+          "entitySetName": "contacts",
+          "logicalName": "contact"
+        },
+        "accounts": {
+          "entitySetName": "accounts",
+          "logicalName": "account"
+        },
+        "cases": {
+          "entitySetName": "incidents",
+          "logicalName": "incident"
+        },
+        "users": {
+          "entitySetName": "systemusers",
+          "logicalName": "systemuser"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}
