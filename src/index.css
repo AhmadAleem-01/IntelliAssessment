@@ -101,6 +101,29 @@ body {
   color: white;
 }
 
+/*
+ * Flatten Fluent input chrome to match design.md (no shadows, no inset
+ * accent border). Bottom-border colour switches to brand purple on focus.
+ */
+[class*='fui-Input'],
+[class*='fui-Textarea'],
+[class*='fui-Dropdown'],
+[class*='fui-SpinButton'] {
+  box-shadow: none !important;
+}
+
+[class*='fui-Input']:focus-within,
+[class*='fui-Textarea']:focus-within,
+[class*='fui-Dropdown']:focus-within {
+  box-shadow: none !important;
+}
+
+[class*='fui-Input']:focus-within::after,
+[class*='fui-Textarea']:focus-within::after,
+[class*='fui-Dropdown']:focus-within::after {
+  border-bottom-color: var(--color-purple) !important;
+}
+
 /* Sleeker scrollbars */
 ::-webkit-scrollbar {
   width: 10px;

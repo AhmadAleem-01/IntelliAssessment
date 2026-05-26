@@ -18,6 +18,7 @@ import { EditTemplateDialog } from './EditTemplateDialog';
 import { DeleteTemplateDialog } from './DeleteTemplateDialog';
 import { Dnx_assessment_templatesstatuscode } from '../../generated/models/Dnx_assessment_templatesModel';
 import { lookupName } from '../../lib/dataverse';
+import { LevelTree } from './levels/LevelTree';
 
 const useStyles = makeStyles({
   backLink: {
@@ -145,24 +146,6 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
     color: 'var(--color-text-primary)',
     whiteSpace: 'pre-wrap',
-  },
-  placeholder: {
-    padding: '24px',
-    borderRadius: 'var(--border-radius-lg)',
-    border: '0.5px dashed var(--color-border-secondary)',
-    color: 'var(--color-text-secondary)',
-    fontSize: '13px',
-    backgroundColor: 'var(--color-background-primary)',
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  placeholderTitle: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
   },
 });
 
@@ -316,11 +299,7 @@ export function TemplateEditorPage() {
         </div>
       </div>
 
-      <div className={styles.placeholder}>
-        <div className={styles.placeholderTitle}>Tree editor coming next</div>
-        The Root → Section → Subsection → Question authoring experience lands in
-        Milestone 3.
-      </div>
+      <LevelTree templateId={template.dnx_assessment_templateid} />
     </div>
   );
 }
