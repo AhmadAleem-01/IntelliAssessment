@@ -1,122 +1,122 @@
 import { makeStyles } from '@fluentui/react-components';
-import {
-  ClipboardTaskListLtr24Regular,
-  Hourglass24Regular,
-  CheckmarkCircle24Regular,
-  DocumentCheckmark24Regular,
-} from '@fluentui/react-icons';
 
 const useStyles = makeStyles({
   header: {
-    marginBottom: '32px',
+    marginBottom: '24px',
   },
   title: {
-    fontSize: '30px',
-    fontWeight: 700,
-    letterSpacing: '-0.025em',
+    fontSize: '18px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
     margin: 0,
-    lineHeight: 1.15,
+    letterSpacing: '-0.005em',
   },
   subtitle: {
-    color: 'var(--app-text-muted)',
-    fontSize: '15px',
-    marginTop: '6px',
+    color: 'var(--color-text-secondary)',
+    fontSize: '13px',
+    marginTop: '4px',
   },
-  grid: {
+  statRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-    gap: '20px',
-  },
-  tile: {
-    backgroundColor: 'var(--app-surface)',
-    borderRadius: 'var(--app-radius-lg)',
-    border: '1px solid var(--app-border)',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '18px',
-    boxShadow: 'var(--app-shadow-card)',
-    transition: 'all 0.18s ease',
-    ':hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: 'var(--app-shadow-lift)',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '12px',
+    marginBottom: '24px',
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: 'repeat(2, 1fr)',
     },
   },
-  iconWrap: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '12px',
+  statCard: {
+    backgroundColor: 'var(--color-background-secondary)',
+    borderRadius: 'var(--border-radius-md)',
+    padding: '14px 18px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  statLabel: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: 'var(--color-text-secondary)',
+  },
+  statValue: {
+    fontSize: '24px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+    lineHeight: 1.1,
+    letterSpacing: '-0.01em',
+  },
+  statSub: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    marginTop: '2px',
+  },
+  amber: { color: 'var(--color-amber-text)' },
+  green: { color: 'var(--color-green-text)' },
+  twoCol: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    marginBottom: '16px',
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: '1fr',
+    },
+  },
+  card: {
+    backgroundColor: 'var(--color-background-primary)',
+    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--border-radius-lg)',
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    padding: '14px 18px',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+  },
+  cardBody: { padding: '18px' },
+  outcomeRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: '12px',
+    marginBottom: '10px',
   },
-  metricRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px',
-  },
-  metric: {
-    fontSize: '36px',
-    fontWeight: 700,
-    letterSpacing: '-0.03em',
-    color: 'var(--app-text)',
-    lineHeight: 1,
-  },
-  delta: {
+  outcomeLabel: {
     fontSize: '12px',
-    fontWeight: 600,
-    color: '#10b981',
+    color: 'var(--color-text-secondary)',
+    minWidth: '120px',
   },
-  label: {
-    fontSize: '13px',
+  progressTrack: {
+    flex: 1,
+    height: '6px',
+    backgroundColor: 'var(--color-background-tertiary)',
+    borderRadius: '3px',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: '3px',
+  },
+  outcomeValue: {
+    fontSize: '12px',
+    color: 'var(--color-text-primary)',
     fontWeight: 500,
-    color: 'var(--app-text-muted)',
+    minWidth: '32px',
+    textAlign: 'right',
   },
-  emptyBanner: {
-    marginTop: '32px',
-    padding: '20px 24px',
-    borderRadius: 'var(--app-radius-md)',
-    background:
-      'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(168,85,247,0.04) 100%)',
-    border: '1px solid rgba(99,102,241,0.18)',
-    color: 'var(--app-text-muted)',
+  placeholder: {
     fontSize: '13px',
+    color: 'var(--color-text-secondary)',
+    textAlign: 'center',
+    padding: '24px',
   },
 });
 
-const TILES = [
-  {
-    label: 'In Progress',
-    value: '—',
-    icon: <ClipboardTaskListLtr24Regular />,
-    bg: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-    soft: '#eef2ff',
-    color: '#4f46e5',
-  },
-  {
-    label: 'Pending Evidence',
-    value: '—',
-    icon: <Hourglass24Regular />,
-    bg: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
-    soft: '#fffbeb',
-    color: '#b45309',
-  },
-  {
-    label: 'Ready for Sign-off',
-    value: '—',
-    icon: <DocumentCheckmark24Regular />,
-    bg: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
-    soft: '#ecfeff',
-    color: '#0e7490',
-  },
-  {
-    label: 'Completed',
-    value: '—',
-    icon: <CheckmarkCircle24Regular />,
-    bg: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
-    soft: '#ecfdf5',
-    color: '#047857',
-  },
+const STAT_TILES = [
+  { label: 'Total assessments', value: '—', sub: 'No data yet' },
+  { label: 'In progress', value: '—', sub: 'No data yet' },
+  { label: 'Pending review', value: '—', sub: 'Awaiting sign-off' },
+  { label: 'Completed this month', value: '—', sub: 'No data yet' },
 ];
 
 export function DashboardPage() {
@@ -126,29 +126,73 @@ export function DashboardPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>Dashboard</h1>
         <div className={styles.subtitle}>
-          Live assessor workload across statuses. Wired to Dataverse aggregates in Milestone 8.
+          High-level operational view across all assessments.
         </div>
       </div>
 
-      <div className={styles.grid}>
-        {TILES.map((t) => (
-          <div key={t.label} className={styles.tile}>
-            <div className={styles.iconWrap} style={{ background: t.soft, color: t.color }}>
-              {t.icon}
-            </div>
-            <div>
-              <div className={styles.metricRow}>
-                <span className={styles.metric}>{t.value}</span>
-              </div>
-              <div className={styles.label}>{t.label}</div>
-            </div>
+      <div className={styles.statRow}>
+        {STAT_TILES.map((t) => (
+          <div key={t.label} className={styles.statCard}>
+            <div className={styles.statLabel}>{t.label}</div>
+            <div className={styles.statValue}>{t.value}</div>
+            <div className={styles.statSub}>{t.sub}</div>
           </div>
         ))}
       </div>
 
-      <div className={styles.emptyBanner}>
-        Metrics will populate once assessment instances are created. Head to <b>Projects</b> to
-        spin up your first workspace.
+      <div className={styles.twoCol}>
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>Assessor workload</div>
+          <div className={styles.cardBody}>
+            <div className={styles.placeholder}>
+              Workload distribution will populate once instances are created (Milestone 4).
+            </div>
+          </div>
+        </div>
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>Outcome breakdown</div>
+          <div className={styles.cardBody}>
+            <div className={styles.outcomeRow}>
+              <span className={styles.outcomeLabel}>Suitable</span>
+              <div className={styles.progressTrack}>
+                <div
+                  className={styles.progressFill}
+                  style={{ width: '0%', backgroundColor: 'var(--color-green)' }}
+                />
+              </div>
+              <span className={styles.outcomeValue}>—</span>
+            </div>
+            <div className={styles.outcomeRow}>
+              <span className={styles.outcomeLabel}>Not suitable</span>
+              <div className={styles.progressTrack}>
+                <div
+                  className={styles.progressFill}
+                  style={{ width: '0%', backgroundColor: 'var(--color-red)' }}
+                />
+              </div>
+              <span className={styles.outcomeValue}>—</span>
+            </div>
+            <div className={styles.outcomeRow}>
+              <span className={styles.outcomeLabel}>Pending review</span>
+              <div className={styles.progressTrack}>
+                <div
+                  className={styles.progressFill}
+                  style={{ width: '0%', backgroundColor: 'var(--color-gray)' }}
+                />
+              </div>
+              <span className={styles.outcomeValue}>—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>Recent assessments</div>
+        <div className={styles.cardBody}>
+          <div className={styles.placeholder}>
+            Recent assessment table will appear here once instances exist (Milestone 4).
+          </div>
+        </div>
       </div>
     </div>
   );

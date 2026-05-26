@@ -11,7 +11,7 @@ import {
   MessageBarBody,
   makeStyles,
 } from '@fluentui/react-components';
-import { Edit24Regular } from '@fluentui/react-icons';
+import { Edit20Regular } from '@fluentui/react-icons';
 import { useUpdateProject } from './api';
 import {
   ProjectFormFields,
@@ -23,42 +23,40 @@ import type { Dnx_projects } from '../../generated/models/Dnx_projectsModel';
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: '18px',
-    maxWidth: '520px',
+    borderRadius: 'var(--border-radius-lg)',
+    maxWidth: '480px',
     width: '92vw',
   },
   content: {
-    paddingTop: '8px',
-    paddingBottom: '8px',
+    paddingTop: '4px',
+    paddingBottom: '4px',
   },
   header: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '14px',
-    paddingBottom: '18px',
-    borderBottom: '1px solid var(--app-border)',
-    marginBottom: '22px',
+    alignItems: 'center',
+    gap: '12px',
+    paddingBottom: '14px',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    marginBottom: '18px',
   },
   headerMark: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
-    color: '#fff',
+    width: '32px',
+    height: '32px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-blue-soft)',
+    color: 'var(--color-blue-text)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 8px 18px -8px rgba(59,130,246,0.55)',
     flexShrink: 0,
   },
   headerText: { display: 'flex', flexDirection: 'column', gap: '2px' },
   headerTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    letterSpacing: '-0.015em',
-    color: 'var(--app-text)',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
   },
-  headerSub: { fontSize: '13px', color: 'var(--app-text-muted)' },
+  headerSub: { fontSize: '12px', color: 'var(--color-text-secondary)' },
 });
 
 interface Props {
@@ -111,7 +109,7 @@ export function EditProjectDialog({ project, trigger }: Props) {
             <DialogContent className={styles.content}>
               <div className={styles.header}>
                 <div className={styles.headerMark}>
-                  <Edit24Regular />
+                  <Edit20Regular />
                 </div>
                 <div className={styles.headerText}>
                   <span className={styles.headerTitle}>Edit project</span>

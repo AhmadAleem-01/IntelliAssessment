@@ -5,6 +5,7 @@ import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
 import { TemplatesPage } from './features/templates/TemplatesPage';
 import { TemplateEditorPage } from './features/templates/TemplateEditorPage';
 import { AssessmentPage } from './features/assessments/AssessmentPage';
+import { AssessmentsListPage } from './features/assessments/AssessmentsListPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/templates/:templateId/edit" element={<TemplateEditorPage />} />
+        <Route path="/assessments" element={<AssessmentsListPage />} />
         <Route path="/assessments/:assessmentId" element={<AssessmentPage />} />
       </Route>
     </Routes>

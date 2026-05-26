@@ -12,69 +12,64 @@ import {
   MessageBarBody,
   makeStyles,
 } from '@fluentui/react-components';
-import { Warning24Filled } from '@fluentui/react-icons';
+import { Warning20Regular } from '@fluentui/react-icons';
 import { useDeleteTemplate } from './api';
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: '18px',
-    maxWidth: '480px',
+    borderRadius: 'var(--border-radius-lg)',
+    maxWidth: '440px',
     width: '92vw',
   },
-  content: {
-    paddingTop: '8px',
-    paddingBottom: '8px',
-  },
+  content: { paddingTop: '4px', paddingBottom: '4px' },
   header: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '14px',
-    paddingBottom: '18px',
-    borderBottom: '1px solid var(--app-border)',
-    marginBottom: '20px',
+    alignItems: 'center',
+    gap: '12px',
+    paddingBottom: '14px',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    marginBottom: '18px',
   },
   headerMark: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
-    color: '#fff',
+    width: '32px',
+    height: '32px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 8px 18px -8px rgba(239,68,68,0.55)',
     flexShrink: 0,
   },
   headerText: { display: 'flex', flexDirection: 'column', gap: '2px' },
   headerTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    letterSpacing: '-0.015em',
-    color: 'var(--app-text)',
-  },
-  headerSub: { fontSize: '13px', color: 'var(--app-text-muted)' },
-  body: {
     fontSize: '14px',
-    lineHeight: 1.55,
-    color: 'var(--app-text)',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
   },
-  nameTag: { fontWeight: 600, color: 'var(--app-text)' },
+  headerSub: { fontSize: '12px', color: 'var(--color-text-secondary)' },
+  body: {
+    fontSize: '13px',
+    lineHeight: 1.55,
+    color: 'var(--color-text-primary)',
+  },
+  nameTag: { fontWeight: 500, color: 'var(--color-text-primary)' },
   warning: {
     marginTop: '14px',
     padding: '12px 14px',
-    borderRadius: '10px',
-    backgroundColor: '#fef2f2',
-    color: '#991b1b',
-    fontSize: '13px',
-    border: '1px solid #fecaca',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
+    fontSize: '12px',
+    border: '0.5px solid var(--color-amber)',
   },
   dangerBtn: {
-    backgroundColor: '#ef4444 !important',
+    backgroundColor: 'var(--color-red) !important',
     color: '#fff !important',
-    border: '1px solid #ef4444 !important',
+    border: '0.5px solid var(--color-red) !important',
     ':hover': {
-      backgroundColor: '#dc2626 !important',
-      border: '1px solid #dc2626 !important',
+      backgroundColor: 'var(--color-red-text) !important',
+      border: '0.5px solid var(--color-red-text) !important',
     },
   },
 });
@@ -111,7 +106,7 @@ export function DeleteTemplateDialog({ templateId, templateName, trigger }: Prop
           <DialogContent className={styles.content}>
             <div className={styles.header}>
               <div className={styles.headerMark}>
-                <Warning24Filled />
+                <Warning20Regular />
               </div>
               <div className={styles.headerText}>
                 <span className={styles.headerTitle}>Delete template</span>

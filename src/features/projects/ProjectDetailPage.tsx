@@ -7,167 +7,159 @@ import {
   makeStyles,
 } from '@fluentui/react-components';
 import {
-  ChevronLeft20Regular,
-  Edit20Regular,
-  Delete20Regular,
+  ChevronLeft16Regular,
+  Edit16Regular,
+  Delete16Regular,
+  Folder20Regular,
 } from '@fluentui/react-icons';
 import { useProject } from './api';
 import { EditProjectDialog } from './EditProjectDialog';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { Dnx_projectsstatuscode } from '../../generated/models/Dnx_projectsModel';
+import { lookupName } from '../../lib/dataverse';
 
 const useStyles = makeStyles({
   backLink: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--app-text-muted)',
+    fontSize: '12px',
+    fontWeight: 400,
+    color: 'var(--color-text-secondary)',
     textDecoration: 'none',
-    marginBottom: '16px',
-    ':hover': { color: 'var(--app-accent)' },
+    marginBottom: '14px',
+    ':hover': { color: 'var(--color-text-primary)' },
   },
-  hero: {
+  header: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '20px',
-    marginBottom: '32px',
+    justifyContent: 'space-between',
+    gap: '16px',
+    marginBottom: '24px',
   },
-  heroActions: {
+  headerLeft: {
     display: 'flex',
-    gap: '8px',
-    flexShrink: 0,
+    alignItems: 'center',
+    gap: '12px',
+    minWidth: 0,
   },
-  deleteBtn: {
-    color: '#b91c1c !important',
-    backgroundColor: 'transparent !important',
-    border: '1px solid #fecaca !important',
-    ':hover': {
-      backgroundColor: '#fef2f2 !important',
-      color: '#991b1b !important',
-      border: '1px solid #fca5a5 !important',
-    },
-  },
-  mark: {
-    width: '64px',
-    height: '64px',
-    borderRadius: '16px',
-    background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-    color: '#fff',
+  iconChip: {
+    width: '32px',
+    height: '32px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-purple-soft)',
+    color: 'var(--color-purple-text)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontWeight: 700,
-    fontSize: '22px',
-    letterSpacing: '-0.01em',
-    boxShadow: '0 10px 24px -10px rgba(99,102,241,0.55)',
     flexShrink: 0,
   },
-  heroText: { flex: 1 },
+  titleBlock: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 },
   title: {
-    fontSize: '30px',
-    fontWeight: 700,
-    letterSpacing: '-0.025em',
+    fontSize: '18px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
     margin: 0,
-    lineHeight: 1.15,
+    letterSpacing: '-0.005em',
   },
   metaRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginTop: '8px',
-    color: 'var(--app-text-muted)',
-    fontSize: '13px',
+    gap: '8px',
+    color: 'var(--color-text-secondary)',
+    fontSize: '12px',
+    flexWrap: 'wrap',
   },
   code: {
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--app-text-subtle)',
+    color: 'var(--color-text-tertiary)',
+    letterSpacing: '0.04em',
   },
   statusPill: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '4px 10px',
-    borderRadius: '999px',
+    padding: '3px 8px',
+    borderRadius: 'var(--border-radius-pill)',
     fontSize: '11px',
-    fontWeight: 600,
+    fontWeight: 500,
   },
-  statusDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
+  headerActions: {
+    display: 'flex',
+    gap: '6px',
+    flexShrink: 0,
+  },
+  deleteBtn: {
+    color: 'var(--color-red-text) !important',
+    backgroundColor: 'transparent !important',
+    border: '0.5px solid var(--color-border-tertiary) !important',
+    ':hover': {
+      backgroundColor: 'var(--color-red-soft) !important',
+      border: '0.5px solid var(--color-red) !important',
+    },
   },
   card: {
-    backgroundColor: 'var(--app-surface)',
-    border: '1px solid var(--app-border)',
-    borderRadius: 'var(--app-radius-lg)',
-    padding: '28px',
-    boxShadow: 'var(--app-shadow-card)',
-  },
-  sectionLabel: {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: 'var(--app-text-subtle)',
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
+    backgroundColor: 'var(--color-background-primary)',
+    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--border-radius-lg)',
+    overflow: 'hidden',
     marginBottom: '16px',
   },
+  cardHeader: {
+    padding: '14px 18px',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+  },
+  cardBody: { padding: '18px' },
   fieldsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '20px 32px',
+    gap: '16px 28px',
   },
   field: { display: 'flex', flexDirection: 'column', gap: '4px' },
   fieldLabel: {
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 500,
-    color: 'var(--app-text-subtle)',
+    color: 'var(--color-text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
   },
   fieldValue: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--app-text)',
+    fontSize: '13px',
+    fontWeight: 400,
+    color: 'var(--color-text-primary)',
   },
   description: {
-    marginTop: '24px',
-    paddingTop: '24px',
-    borderTop: '1px solid var(--app-border)',
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: '0.5px solid var(--color-border-tertiary)',
   },
   descText: {
-    fontSize: '14px',
-    lineHeight: 1.6,
-    color: 'var(--app-text)',
+    fontSize: '13px',
+    lineHeight: 1.55,
+    color: 'var(--color-text-primary)',
     whiteSpace: 'pre-wrap',
   },
   placeholder: {
-    marginTop: '24px',
-    padding: '20px 24px',
-    borderRadius: 'var(--app-radius-md)',
-    border: '1px dashed var(--app-border)',
-    color: 'var(--app-text-muted)',
+    padding: '18px',
+    borderRadius: 'var(--border-radius-lg)',
+    border: '0.5px dashed var(--color-border-secondary)',
+    color: 'var(--color-text-secondary)',
     fontSize: '13px',
-    background: 'var(--app-surface)',
+    backgroundColor: 'var(--color-background-primary)',
   },
 });
 
-const STATUS_STYLES: Record<string, { bg: string; color: string; dot: string }> = {
-  Active: { bg: '#ecfdf5', color: '#047857', dot: '#10b981' },
-  OnHold: { bg: '#fffbeb', color: '#b45309', dot: '#f59e0b' },
-  Archived: { bg: '#f1f5f9', color: '#475569', dot: '#94a3b8' },
-  Inactive: { bg: '#f1f5f9', color: '#475569', dot: '#94a3b8' },
-  Unknown: { bg: '#f1f5f9', color: '#475569', dot: '#94a3b8' },
+const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
+  Active: { bg: 'var(--color-green-soft)', color: 'var(--color-green-text)', label: 'Active' },
+  OnHold: { bg: 'var(--color-amber-soft)', color: 'var(--color-amber-text)', label: 'On hold' },
+  Archived: { bg: 'var(--color-gray-soft)', color: 'var(--color-gray-text)', label: 'Archived' },
+  Inactive: { bg: 'var(--color-gray-soft)', color: 'var(--color-gray-text)', label: 'Inactive' },
+  Unknown: { bg: 'var(--color-gray-soft)', color: 'var(--color-gray-text)', label: 'Unknown' },
 };
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 export function ProjectDetailPage() {
   const styles = useStyles();
@@ -191,31 +183,34 @@ export function ProjectDetailPage() {
   return (
     <div>
       <Link to="/projects" className={styles.backLink}>
-        <ChevronLeft20Regular /> Back to projects
+        <ChevronLeft16Regular /> Back to projects
       </Link>
 
-      <div className={styles.hero}>
-        <div className={styles.mark}>{initialsOf(project.dnx_project_name)}</div>
-        <div className={styles.heroText}>
-          <h1 className={styles.title}>{project.dnx_project_name}</h1>
-          <div className={styles.metaRow}>
-            {project.dnx_project_code && (
-              <span className={styles.code}>{project.dnx_project_code}</span>
-            )}
-            <span
-              className={styles.statusPill}
-              style={{ background: status.bg, color: status.color }}
-            >
-              <span className={styles.statusDot} style={{ background: status.dot }} />
-              {label === 'OnHold' ? 'On Hold' : label}
-            </span>
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
+          <div className={styles.iconChip}>
+            <Folder20Regular />
+          </div>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>{project.dnx_project_name}</h1>
+            <div className={styles.metaRow}>
+              {project.dnx_project_code && (
+                <span className={styles.code}>{project.dnx_project_code}</span>
+              )}
+              <span
+                className={styles.statusPill}
+                style={{ backgroundColor: status.bg, color: status.color }}
+              >
+                {status.label}
+              </span>
+            </div>
           </div>
         </div>
-        <div className={styles.heroActions}>
+        <div className={styles.headerActions}>
           <EditProjectDialog
             project={project}
             trigger={
-              <Button appearance="secondary" icon={<Edit20Regular />}>
+              <Button appearance="secondary" icon={<Edit16Regular />}>
                 Edit
               </Button>
             }
@@ -227,7 +222,7 @@ export function ProjectDetailPage() {
               <Button
                 className={styles.deleteBtn}
                 appearance="secondary"
-                icon={<Delete20Regular />}
+                icon={<Delete16Regular />}
               >
                 Delete
               </Button>
@@ -237,31 +232,43 @@ export function ProjectDetailPage() {
       </div>
 
       <div className={styles.card}>
-        <div className={styles.sectionLabel}>Overview</div>
-        <div className={styles.fieldsGrid}>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>Owner</span>
-            <span className={styles.fieldValue}>{project.owneridname ?? '—'}</span>
+        <div className={styles.cardHeader}>Overview</div>
+        <div className={styles.cardBody}>
+          <div className={styles.fieldsGrid}>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Owner</span>
+              <span className={styles.fieldValue}>
+                {lookupName(project, 'ownerid') ?? '—'}
+              </span>
+            </div>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Created by</span>
+              <span className={styles.fieldValue}>
+                {lookupName(project, 'createdby') ?? '—'}
+              </span>
+            </div>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Created</span>
+              <span className={styles.fieldValue}>
+                {project.createdon ? new Date(project.createdon).toLocaleString() : '—'}
+              </span>
+            </div>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Last modified</span>
+              <span className={styles.fieldValue}>
+                {project.modifiedon ? new Date(project.modifiedon).toLocaleString() : '—'}
+              </span>
+            </div>
           </div>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>Created</span>
-            <span className={styles.fieldValue}>
-              {project.createdon ? new Date(project.createdon).toLocaleString() : '—'}
-            </span>
-          </div>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>Last modified</span>
-            <span className={styles.fieldValue}>
-              {project.modifiedon ? new Date(project.modifiedon).toLocaleString() : '—'}
-            </span>
-          </div>
+          {project.dnx_description && (
+            <div className={styles.description}>
+              <div className={styles.fieldLabel} style={{ marginBottom: 6 }}>
+                Description
+              </div>
+              <div className={styles.descText}>{project.dnx_description}</div>
+            </div>
+          )}
         </div>
-        {project.dnx_description && (
-          <div className={styles.description}>
-            <div className={styles.sectionLabel}>Description</div>
-            <div className={styles.descText}>{project.dnx_description}</div>
-          </div>
-        )}
       </div>
 
       <div className={styles.placeholder}>

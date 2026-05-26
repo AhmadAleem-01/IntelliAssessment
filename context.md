@@ -134,6 +134,22 @@ The generated `<Entity>Base` interface marks `ownerid`, `owneridtype`, etc. as r
 
 Generated services use `getClient(dataSourcesInfo)` internally — no `<PowerProvider>` wrapper needed, no token plumbing. Just call `Dnx_xxxService.create/get/update/delete` and the SDK handles bearer tokens via the host iframe.
 
+### G. Lookup display names live on the OData annotation key, NOT the typed field
+
+The generated `<Entity>` interfaces include fields like `owneridname: string`, `createdbyname?: string` — but at runtime **the SDK does not flatten the OData annotation onto those typed fields**. Instead the display value lives on the raw key `_<lookup>_value@OData.Community.Display.V1.FormattedValue` and the GUID on `_<lookup>_value`.
+
+Use the helper in `src/lib/dataverse.ts`:
+```ts
+import { lookupName, lookupId } from '../../lib/dataverse';
+
+lookupName(project, 'ownerid');    // "Ahmad Aleem"
+lookupName(project, 'createdby');  // "Ahmad Aleem"
+lookupName(instance, 'dnx_project'); // "Q2 Skill Assessments"
+lookupId(project, 'ownerid');      // "01e47fe3-aecd-ef11-b8e8-7c1e522b249e"
+```
+
+Do **not** read `record.owneridname` / `record.createdbyname` directly — they're typed as present but undefined at runtime. The SDK *does* request `odata.include-annotations=*` so the data is always there, just at the awkward key.
+
 ## Dataverse entity reference (publisher prefix `dnx_`)
 
 | Table | Logical name | Use |
