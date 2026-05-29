@@ -5,6 +5,7 @@ import type {
   Dnx_assessment_levelsBase,
 } from '../../../generated/models/Dnx_assessment_levelsModel';
 import type { LevelType, DataType } from './levelTypes';
+import { serializeVisibility, type VisibilityRule } from './visibility';
 
 export const levelKeys = {
   all: ['levels'] as const,
@@ -23,6 +24,12 @@ export interface LevelFormValue {
   isReadOnly?: boolean;
   optionSetReference?: string;
   documentTypeReference?: string;
+  /**
+   * Conditional visibility rule. When set, this Question is shown at runtime
+   * only if the referenced source Question's answer matches. Stored as JSON
+   * in `dnx_visibility_condition`. Only valid when levelType === 3 (Question).
+   */
+  visibilityRule?: VisibilityRule;
 }
 
 export interface CreateLevelInput extends LevelFormValue {
@@ -77,6 +84,9 @@ function levelToRecord(
     dnx_is_read_only: input.isReadOnly,
     dnx_option_set_reference: input.optionSetReference,
     dnx_document_type_reference: input.documentTypeReference,
+    // Always include (possibly undefined → null) so clearing a rule writes back.
+    dnx_visibility_condition:
+      input.levelType === 3 ? serializeVisibility(input.visibilityRule) : undefined,
   };
   // Question levels carry data type; otherwise omit so Dataverse keeps it null.
   if (input.levelType === 3 && input.dataType !== undefined) {
@@ -179,6 +189,7 @@ export function useDuplicateLevel(templateId: string) {
           dnx_is_read_only: src.dnx_is_read_only,
           dnx_option_set_reference: src.dnx_option_set_reference,
           dnx_document_type_reference: src.dnx_document_type_reference,
+          dnx_visibility_condition: src.dnx_visibility_condition,
           'dnx_Assessment_Template@odata.bind': `/dnx_assessment_templates(${templateId})`,
         };
         if (newParentId) {

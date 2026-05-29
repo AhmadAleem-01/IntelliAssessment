@@ -333,6 +333,14 @@
           "x-ms-read-only": true,
           "maxLength": 850
         },
+        "dnx_visibility_condition": {
+          "type": "string",
+          "title": "Visibility Condition",
+          "x-ms-dataverse-attribute": "dnx_visibility_condition",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "dnx_Visibility_Condition",
+          "maxLength": 3000
+        },
         "importsequencenumber": {
           "type": "string",
           "title": "Import Sequence Number",

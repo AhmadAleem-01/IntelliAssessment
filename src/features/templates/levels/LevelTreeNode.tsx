@@ -30,6 +30,7 @@ import {
   type DataType,
 } from './levelTypes';
 import { parseOptions } from './options';
+import { parseVisibility } from './visibility';
 
 const useStyles = makeStyles({
   node: {
@@ -187,6 +188,17 @@ const useStyles = makeStyles({
     backgroundColor: 'var(--color-purple)',
     flexShrink: 0,
   },
+  conditionalPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '1px 6px',
+    borderRadius: 'var(--border-radius-pill)',
+    fontSize: '10px',
+    fontWeight: 500,
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
+  },
   requiredAsterisk: {
     color: 'var(--color-red)',
     fontWeight: 500,
@@ -227,6 +239,8 @@ export function LevelTreeNode({
     levelType === 3 && (dataType === 1 || dataType === 2)
       ? parseOptions(level.dnx_option_set_reference).length
       : 0;
+  const visibility =
+    levelType === 3 ? parseVisibility(level.dnx_visibility_condition) : undefined;
 
   const {
     attributes,
@@ -317,6 +331,17 @@ export function LevelTreeNode({
                 <span className={styles.metaDot} />
                 <span>
                   {optionCount} {optionCount === 1 ? 'option' : 'options'}
+                </span>
+              </>
+            )}
+            {visibility && (
+              <>
+                <span className={styles.metaDot} />
+                <span
+                  className={styles.conditionalPill}
+                  title={`Shown when "${visibility.showWhen.questionLabel ?? 'a parent question'}" ${visibility.showWhen.operator === 'equals' ? '=' : '≠'} "${visibility.showWhen.value}"`}
+                >
+                  Conditional
                 </span>
               </>
             )}

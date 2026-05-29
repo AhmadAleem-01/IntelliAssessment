@@ -28,6 +28,10 @@ import {
 } from './levelTypes';
 import { OptionListEditor } from './OptionListEditor';
 import { parseOptions, serializeOptions } from './options';
+import { VisibilityRuleEditor } from './VisibilityRuleEditor';
+import { parseVisibility, type VisibilityRule } from './visibility';
+import { eligibleParents } from './eligibleParents';
+import { useTemplateLevels } from './api';
 import type { Dnx_assessment_levels } from '../../../generated/models/Dnx_assessment_levelsModel';
 
 const useStyles = makeStyles({
@@ -130,7 +134,11 @@ function dataTypeFromLevel(level: Dnx_assessment_levels): DataType | undefined {
   return v === undefined || v === null ? undefined : (v as DataType);
 }
 
-type FormState = LevelFormValue & { levelType: LevelType; options: string[] };
+type FormState = LevelFormValue & {
+  levelType: LevelType;
+  options: string[];
+  visibilityRule: VisibilityRule | undefined;
+};
 
 function levelToForm(level: Dnx_assessment_levels): FormState {
   return {
@@ -145,6 +153,7 @@ function levelToForm(level: Dnx_assessment_levels): FormState {
     optionSetReference: level.dnx_option_set_reference ?? '',
     options: parseOptions(level.dnx_option_set_reference),
     documentTypeReference: level.dnx_document_type_reference ?? '',
+    visibilityRule: parseVisibility(level.dnx_visibility_condition),
   };
 }
 
@@ -160,6 +169,7 @@ const blankForm = (levelType: LevelType): FormState => ({
   optionSetReference: '',
   options: [],
   documentTypeReference: '',
+  visibilityRule: undefined,
 });
 
 export function LevelDialog(props: Props) {
@@ -171,6 +181,12 @@ export function LevelDialog(props: Props) {
   const create = useCreateLevel(templateId);
   const update = useUpdateLevel(templateId, levelId);
   const mutation = isEdit ? update : create;
+
+  // Pull all levels for the template so we can list candidate "parent questions"
+  // a visibility rule may reference. Cached by the LevelTree query, so this is
+  // essentially free.
+  const { data: allLevels } = useTemplateLevels(templateId);
+  const parents = eligibleParents(allLevels, isEdit ? levelId : undefined);
 
   const [form, setForm] = useState<FormState>(
     isEdit ? levelToForm(props.level) : blankForm(props.levelType),
@@ -211,6 +227,7 @@ export function LevelDialog(props: Props) {
       optionSetReference: isChoiceType ? serializeOptions(form.options) : undefined,
       documentTypeReference:
         isQuestion ? form.documentTypeReference?.trim() || undefined : undefined,
+      visibilityRule: isQuestion ? form.visibilityRule : undefined,
     };
 
     if (props.mode === 'edit') {
@@ -386,6 +403,15 @@ export function LevelDialog(props: Props) {
                         onChange={(_, d) => patch({ includeInLetter: d.checked })}
                       />
                     </div>
+
+                    <div className={styles.sectionDivider} />
+                    <div className={styles.sectionLabel}>Visibility</div>
+
+                    <VisibilityRuleEditor
+                      value={form.visibilityRule}
+                      parents={parents}
+                      onChange={(rule) => patch({ visibilityRule: rule })}
+                    />
                   </>
                 )}
 

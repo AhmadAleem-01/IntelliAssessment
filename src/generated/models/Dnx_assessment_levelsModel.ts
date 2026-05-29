@@ -43,6 +43,7 @@ export interface Dnx_assessment_levelsBase {
   dnx_name: string;
   dnx_option_set_reference?: string;
   "dnx_Parent_Assessment_Level@odata.bind"?: string;
+  dnx_visibility_condition?: string;
   importsequencenumber?: number;
   overriddencreatedon?: string;
   ownerid: string;
