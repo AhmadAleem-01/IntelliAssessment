@@ -103,13 +103,18 @@ body {
 
 /*
  * Flatten Fluent input chrome to match design.md (no shadows, no inset
- * accent border). Bottom-border colour switches to brand purple on focus.
+ * accent border). Resting state: all 4 sides use the same subtle border
+ * (Fluent default uses a darker bottom — "Material affordance hint"
+ * which doesn't fit our flat aesthetic). Focused state: bottom flips to
+ * brand purple via the ::after pseudo-element.
  */
 [class*='fui-Input'],
 [class*='fui-Textarea'],
 [class*='fui-Dropdown'],
 [class*='fui-SpinButton'] {
   box-shadow: none !important;
+  border-bottom-color: var(--color-border-tertiary) !important;
+  border-bottom-width: 0.5px !important;
 }
 
 [class*='fui-Input']:focus-within,
@@ -118,10 +123,18 @@ body {
   box-shadow: none !important;
 }
 
+[class*='fui-Input']::after,
+[class*='fui-Textarea']::after,
+[class*='fui-Dropdown']::after {
+  border-bottom-color: transparent !important;
+  border-bottom-width: 0 !important;
+}
+
 [class*='fui-Input']:focus-within::after,
 [class*='fui-Textarea']:focus-within::after,
 [class*='fui-Dropdown']:focus-within::after {
   border-bottom-color: var(--color-purple) !important;
+  border-bottom-width: 1px !important;
 }
 
 /* Sleeker scrollbars */

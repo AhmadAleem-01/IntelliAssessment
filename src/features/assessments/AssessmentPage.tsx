@@ -10,6 +10,7 @@ import {
   ClipboardTaskListLtr20Regular,
 } from '@fluentui/react-icons';
 import { useAssessmentInstance } from './api';
+import { ChecklistRenderer } from './ChecklistRenderer';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
 
@@ -279,11 +280,15 @@ export function AssessmentPage() {
         </div>
       </div>
 
-      <div className={styles.placeholder}>
-        <div className={styles.placeholderTitle}>Checklist runtime coming next</div>
-        The fillable checklist (per-data-type inputs, autosave to responses,
-        conditional visibility evaluator) lands in M4b.
-      </div>
+      {templateId ? (
+        <ChecklistRenderer instanceId={assessment.dnx_assessment_instanceid} templateId={templateId} />
+      ) : (
+        <div className={styles.placeholder}>
+          <div className={styles.placeholderTitle}>Template missing</div>
+          This assessment has no template linked. Open the instance in Dataverse to
+          set one before answering.
+        </div>
+      )}
     </div>
   );
 }
