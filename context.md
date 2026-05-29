@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-29 (M4a shipped).
+> Read this first when returning to the project. Last updated: 2026-05-30 (M4b + polish round shipped).
 
 ## What this is
 
@@ -21,8 +21,8 @@ The detailed product spec lives in two places:
 | **M3b** Drag-reorder | ✅ done | `@dnd-kit/core` + `@dnd-kit/sortable` integration; same-bucket reorder with optimistic cache + rollback |
 | **M3c** Conditional visibility editor | ✅ done | Author-time rule editor; `dnx_visibility_condition` text column on `dnx_assessment_levels`; runtime evaluator pending in M4 |
 | **M4a** Assessment instance CRUD | ✅ done | Start-assessment dialog (picks published template + due date); per-project + global lists; instance shell page with metadata hero |
-| **M4b** Checklist runtime | ⏳ next | Recursive per-data-type field renderer + response load/save (no autosave yet) |
-| **M4c** Autosave + visibility evaluator | not started | Debounced save, version bump, runtime hide/show via `parseVisibility()` |
+| **M4b** Checklist runtime | ✅ done | Recursive per-data-type field renderer, response upsert (create-or-update), conditional visibility hiding, autosave indicator, text-field debounce, smooth reveal animation |
+| **M4c** Version bump + audit snapshots | ⏳ next | Bump `dnx_assessment_instances.dnx_version` on save, snapshot to `dnx_assessment_versions`, surface "v14" in the autosave badge per design.md §11 |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
 | **M7** Rule engine & scoring | not started | |
@@ -34,11 +34,11 @@ The detailed product spec lives in two places:
 - **Projects** — full CRUD (list, detail, create, edit, delete) wired to `Dnx_projectsService`. Flat cards with status pills (Active / On Hold / Archived / Inactive).
 - **Templates** — full CRUD on top-level template records (`Dnx_assessment_templatesService`). Lifecycle status (Draft / Published / Deprecated), **Publish** action that bumps version + stamps `dnx_published_on` (uses `Edm.Date` format, see gotcha B).
 - **Template tree editor** — Section → Subsection → Question authoring under each template via `Dnx_assessment_levelsService`. Contextual add menus respect the allowed-children rules. Question fields support all 5 data types (Boolean / Option set single / Option set multi / Text / Date) with inline custom option sets stored as JSON in `dnx_option_set_reference`. Required flag + Include-in-letter flag (purple dot in tree) + hint text + document-type reference. Cascade-delete walks the subtree depth-first.
-- **Drag-reorder + duplicate** — Drag the 6-dots grip handle on any tree row to reorder within the same parent bucket (sections among sections, subsections within a section, etc.). Cross-parent moves are silently ignored. Reorders write only the rows whose order actually changed; cache updates optimistically with rollback on failure. Each row's kebab menu also exposes **Duplicate**, which deep-copies the subtree (e.g. *Qualification 1* with 4 questions → *Qualification 1 (copy)* with 4 fresh question records) in parallel within each level for fast wide-tree copies. Every icon button has a Fluent tooltip.
-- **Conditional visibility (authoring)** — Each Question's edit dialog has a *Visibility* section. Toggle "Conditional visibility" on, pick a source Question (Boolean / OptionSet / Multiselect), pick an operator (`equals`/`not equals` for single-value sources, `includes`/`does not include` for Multiselect), pick a value from the source's option list. The rule JSON is stored in `dnx_visibility_condition`. The source-question dropdown is grouped by parent path (`Section › Subsection`) using Fluent `OptionGroup` so duplicate question names are disambiguated. Tree rows with a rule configured show an amber **Conditional** pill with a hover tooltip describing the rule. Runtime evaluation is wired in M4c.
-- **Assessment instance CRUD** — *Start assessment* button on each project's detail page opens a dialog that lets the user pick a Published template (Draft/Deprecated templates filtered out) and optionally set a due date. Name pre-fills to `<project> — <today>`. On submit, a row is created in `dnx_assessment_instances` with both `dnx_Project` and `dnx_AssessmentTemplate` lookups bound via `@odata.bind`, `statuscode: Draft`, `dnx_outcome: Pending`, `dnx_version: 1`. The project detail page shows all instances under that project; the global `/assessments` page lists every instance across all projects with status pills (Draft / In progress / Pending review / Complete). The instance detail page is a metadata shell — checklist runtime lands in M4b.
+- **Drag-reorder + duplicate** — Drag the 6-dots grip handle on any tree row to reorder. **Cross-parent moves now supported** (Question between Sections, Subsection between Sections) — `useMoveLevel` re-binds the `dnx_Parent_Assessment_Level` lookup + bumps trailing siblings; drops between mismatched level types are silently rejected. Each row's kebab menu also exposes **Duplicate**, which deep-copies the subtree in parallel within each level and **inserts the copy immediately after the source** (trailing siblings shifted up by 1). Reorders write only the rows whose order actually changed; cache updates optimistically with rollback on failure. Every icon button has a Fluent tooltip.
+- **Conditional visibility (authoring + runtime)** — Each Question's edit dialog has a *Visibility* section. Toggle "Conditional visibility" on, pick a source Question (Boolean / OptionSet / Multiselect), pick an operator (`equals`/`not equals` for single-value sources, `includes`/`does not include` for Multiselect), pick a value from the source's option list. The rule JSON is stored in `dnx_visibility_condition`. **At runtime** the checklist evaluates each rule against the current responses and hides non-matching questions with a smooth `max-height + opacity + translateY` reveal transition (CSS classes `reveal-show` / `reveal-hide` in `index.css`). Multiselect parents follow contains-semantics per the contract in `visibility.ts`. The source-question dropdown is grouped by parent path (`Section › Subsection`) so duplicate names are disambiguated.
+- **Assessment instance CRUD** — *Start assessment* button on each project's detail page opens a dialog that lets the user pick a Published template (Draft/Deprecated templates filtered out) and optionally set a due date. Name pre-fills to `<project> — <today>`. Both `dnx_Project` and `dnx_AssessmentTemplate` lookups bound via `@odata.bind`. The project detail page shows all instances under that project; the global `/assessments` page lists every instance across all projects with status pills (Draft / In progress / Pending review / Complete).
+- **Assessment runtime (M4b)** — Open any assessment instance and you get a fillable checklist of the template's level tree. Each Section is a collapsible card with a *N / M answered* summary; Subsections render as nested blocks; Questions render with their label, required asterisk, purple letter-flag dot, and per-data-type input (Boolean Yes/No toggle • OptionSet single dropdown • Multiselect checkbox group • multi-line Text textarea • native Date picker). Every change upserts a row in `dnx_assessment_responses` keyed by (instance, level); the matching `dnx_response_*` column is written and the other four are explicitly blanked. Text fields **debounce at 800 ms** so we get one write per pause; Boolean/OptionSet/Multi/Date fire immediately. A small **autosave indicator** in the hero meta row cycles through *Autosave on* → *Saving...* (purple pulse) → *Saved at HH:MM* (green check) → *Save failed — retry* (red error).
 - **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
-- **Assessments** — list page is a stub at `/assessments`; detail page (`/assessments/:id`) is also a stub until M4.
 - **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
 
 ## Stack
@@ -294,30 +294,21 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-**M4a is shipped** (assessment instance CRUD + shell page). The next chunk is **M4b — Checklist runtime**: render the template's level tree as a fillable checklist, load existing responses, and let the user enter answers.
+**M4b is shipped** along with a polish round (autosave badge, smooth conditional reveal, insert-duplicate-adjacent-to-source, cross-parent drag in the template tree). The natural next chunk is **M4c — Version bump + audit snapshots**.
 
-Concrete starting tasks for M4b:
+Concrete starting tasks for M4c:
 
-1. **`useAssessmentResponses(instanceId)` hook** — filter `dnx_assessment_responses` by `_dnx_assessment_value` (the instance lookup). Returns the array; M4c does the autosave write path.
-2. **Per-data-type field components** in `src/features/assessments/fields/`:
-   - `BooleanField` — green Yes / red No toggle group per design.md §6
-   - `OptionSetField` — Dropdown of `parseOptions(level.dnx_option_set_reference)`
-   - `MultiSelectField` — Checkbox group; selections persisted as JSON array
-   - `TextField` — single-line `Input`
-   - `TextareaField` — multi-line textarea (use the question's data type to decide — design.md treats Text + Multi-line as one column)
-   - `DateField` — `<input type="date">`
-3. **`ChecklistRenderer.tsx`** — recursive walk over the level tree (use the existing `buildTree()` from `src/features/templates/levels/treeBuilder.ts`). Section → collapse/expand; Subsection → grouped block; Question → label + hint + the right field component, plus an AI tag and "include in letter" purple dot per design.md §5.3.
-4. **Replace the M4a placeholder card** on the instance page with `<ChecklistRenderer>`.
-5. **Visibility hiding (read-only)** — apply `parseVisibility(level.dnx_visibility_condition)` against the current responses to hide questions that don't match. Multiselect parents use contains-semantics per the contract in `visibility.ts`. Re-evaluate on every response change. (Autosave + version bump comes in M4c.)
+1. **Bump `dnx_assessment_instances.dnx_version`** inside `useUpsertResponse`'s `onSuccess` — read current version from cache, increment by 1, write back. Surface the new version in the autosave badge ("Saved at 14:32 · v15") per design.md §11.
+2. **Snapshot to `dnx_assessment_versions`** on every save (or batched at submit-time). Each row stores `dnx_snapshot_json` (full instance state at this version), `dnx_version_number`, and `_dnx_assessment_value` link. Snapshot the responses array + outcome + statuscode.
+3. **Submit-for-review action** — currently `statuscode` stays at `Draft` forever. Add a "Submit" button that flips it to `PendingReview` (778540003) when all required questions answered. Block submit + show inline validation when any required question is empty or invisible-but-required.
+4. **(Stretch) Reviewer comments** — PRD §6.10 has `dnx_reviewer_comments`. A "Comments" tab on the instance page; threaded via `parent_comment_id`. Probably its own milestone (M5+); skip unless asked.
 
-M4c builds on top: debounce a React Query mutation per field-change to write to `dnx_assessment_responses` (`response_text` / `response_boolean` / `response_option` / `response_multi` / `response_date` per data type), bump `dnx_assessment_instances.dnx_version`, surface a small autosave badge.
+Remaining polish items that didn't fit this round:
 
-Smaller polish items that could slot in any time:
-
-- **Cross-parent drag-and-drop** for the template tree (currently same-bucket only).
-- **Insert duplicate adjacent to source** instead of appending to the bucket end.
 - **Code-split with React.lazy()** — bundle is ~830 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
 - **Multi-value visibility rules** — currently a rule has a single RHS value. The runtime contract is forward-compatible (`value: string[]` would migrate cleanly with a parser update). Add when there's actual demand.
+- **Section progress bars** in the assessment runtime header — visual `answered / total` ring per section, plus an overall instance progress.
+- **Mobile responsiveness audit** — the topbar nav + tree editor haven't been tested at narrow viewports.
 
 ## Useful links
 

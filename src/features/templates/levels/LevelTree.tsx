@@ -22,7 +22,12 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
-import { useTemplateLevels, useReorderLevels, useDuplicateLevel } from './api';
+import {
+  useTemplateLevels,
+  useReorderLevels,
+  useDuplicateLevel,
+  useMoveLevel,
+} from './api';
 import { buildTree, findBucket, nextOrder, type LevelNode } from './treeBuilder';
 import { lookupId } from '../../../lib/dataverse';
 import { LevelTreeNode } from './LevelTreeNode';
@@ -102,6 +107,7 @@ export function LevelTree({ templateId }: Props) {
   const { data: levels, isLoading, error } = useTemplateLevels(templateId);
   const reorder = useReorderLevels(templateId);
   const duplicate = useDuplicateLevel(templateId);
+  const move = useMoveLevel(templateId);
   const [dialog, setDialog] = useState<DialogState>({ kind: 'closed' });
 
   // Pointer sensor with a tiny drag distance so quick clicks still register
@@ -137,17 +143,29 @@ export function LevelTree({ templateId }: Props) {
   }
 
   function handleDuplicate(node: LevelNode) {
-    // Place the copy at the end of the same sibling bucket the source lives in.
-    // Top-level sections have no parent → null. Otherwise read the parent's GUID
-    // off the source via the lookup helper.
+    // Place the copy IMMEDIATELY AFTER the source in the same sibling bucket.
+    // Top-level sections have no parent → null. Otherwise read the parent's
+    // GUID off the source via the lookup helper.
     const parentLevelId = lookupId(node.level, 'dnx_parent_assessment_level') ?? null;
     const bucket = parentLevelId
       ? findBucket(tree, node.level.dnx_assessment_levelid)?.bucket ?? []
       : tree;
+    const sourceOrder = node.level.dnx_assessment_level_order ?? 0;
+    const targetOrder = sourceOrder + 1;
+    // Siblings whose order must shift up to make a gap at targetOrder.
+    // Exclude the source itself; include any sibling at or after the gap.
+    const siblingsToShift = bucket
+      .filter(
+        (n) =>
+          n.level.dnx_assessment_levelid !== node.level.dnx_assessment_levelid &&
+          (n.level.dnx_assessment_level_order ?? 0) >= targetOrder,
+      )
+      .map((n) => n.level);
     duplicate.mutate({
       source: node,
       parentLevelId,
-      order: nextOrder(bucket),
+      order: targetOrder,
+      siblingsToShift,
     });
   }
 
@@ -157,17 +175,49 @@ export function LevelTree({ templateId }: Props) {
     const activeBucket = findBucket(tree, String(active.id));
     const overBucket = findBucket(tree, String(over.id));
     if (!activeBucket || !overBucket) return;
-    // Only same-bucket moves in v1 — cross-parent drops are ignored.
-    if (activeBucket.bucket !== overBucket.bucket) return;
 
-    const orderedIds = arrayMove(
-      activeBucket.bucket.map((n) => n.level.dnx_assessment_levelid),
-      activeBucket.index,
-      overBucket.index,
-    );
-    reorder.mutate({
-      orderedIds,
-      currentLevels: levels ?? [],
+    // Same-bucket reorder — fast path.
+    if (activeBucket.bucket === overBucket.bucket) {
+      const orderedIds = arrayMove(
+        activeBucket.bucket.map((n) => n.level.dnx_assessment_levelid),
+        activeBucket.index,
+        overBucket.index,
+      );
+      reorder.mutate({ orderedIds, currentLevels: levels ?? [] });
+      return;
+    }
+
+    // Cross-bucket — only allow moves between buckets that hold the SAME
+    // level type. Section→Subsection-bucket etc. would violate the four-
+    // level hierarchy rules, so we silently reject those drops.
+    const activeNode = activeBucket.bucket[activeBucket.index];
+    const overNode = overBucket.bucket[overBucket.index];
+    const activeType = activeNode.level.dnx_assessment_level_type;
+    const overType = overNode.level.dnx_assessment_level_type;
+    if (activeType !== overType) return;
+
+    // The destination parent is the LevelNode whose `children` IS the
+    // destination bucket. findBucket already gave us that via `parent`.
+    const newParentLevelId = overBucket.parent
+      ? overBucket.parent.level.dnx_assessment_levelid
+      : null;
+    const targetOrder = overNode.level.dnx_assessment_level_order ?? 0;
+
+    // Trailing siblings in the destination bucket need to shift up by 1
+    // to make room. Exclude the dragged item (it'll land at targetOrder).
+    const siblingsToShift = overBucket.bucket
+      .filter(
+        (n) =>
+          n.level.dnx_assessment_levelid !== activeNode.level.dnx_assessment_levelid &&
+          (n.level.dnx_assessment_level_order ?? 0) >= targetOrder,
+      )
+      .map((n) => n.level);
+
+    move.mutate({
+      levelId: activeNode.level.dnx_assessment_levelid,
+      newParentLevelId,
+      newOrder: targetOrder,
+      siblingsToShift,
     });
   }
 
@@ -207,6 +257,14 @@ export function LevelTree({ templateId }: Props) {
           <MessageBar intent="error">
             <MessageBarBody>
               Failed to duplicate: {(duplicate.error as Error).message}
+            </MessageBarBody>
+          </MessageBar>
+        )}
+
+        {move.error && (
+          <MessageBar intent="error">
+            <MessageBarBody>
+              Failed to move: {(move.error as Error).message}
             </MessageBarBody>
           </MessageBar>
         )}

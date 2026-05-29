@@ -167,8 +167,14 @@ export function useDuplicateLevel(templateId: string) {
       source: LevelNodeLike;
       /** Parent under which the copy lands. Null means a top-level section. */
       parentLevelId: string | null;
-      /** Order slot for the new root copy (typically nextOrder(siblings)). */
+      /** Order slot for the new root copy. */
       order: number;
+      /**
+       * Siblings whose `dnx_assessment_level_order` must shift up by 1 to
+       * make room for the new copy. Used when inserting adjacent to the
+       * source — empty / omitted if appending to the end of the bucket.
+       */
+      siblingsToShift?: Dnx_assessment_levels[];
     }): Promise<void> => {
       const copy = async (
         node: LevelNodeLike,
@@ -210,6 +216,18 @@ export function useDuplicateLevel(templateId: string) {
         );
         return newId;
       };
+      // Shift the trailing siblings up by 1 in parallel before the new copy
+      // is inserted into the gap. Sequential update -> create avoids a
+      // unique-order conflict if Dataverse ever adds one.
+      if (params.siblingsToShift && params.siblingsToShift.length > 0) {
+        await Promise.all(
+          params.siblingsToShift.map((s) =>
+            Dnx_assessment_levelsService.update(s.dnx_assessment_levelid, {
+              dnx_assessment_level_order: (s.dnx_assessment_level_order ?? 0) + 1,
+            } as unknown as Partial<Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>>),
+          ),
+        );
+      }
       await copy(params.source, params.parentLevelId, params.order, true);
     },
     onSuccess: () => {
@@ -286,6 +304,61 @@ export function useReorderLevels(templateId: string) {
       }
     },
     onSettled: () => {
+      qc.invalidateQueries({ queryKey: levelKeys.byTemplate(templateId) });
+    },
+  });
+}
+
+/**
+ * Move a single level into a different parent bucket at a chosen order slot.
+ * Used by cross-parent drag-and-drop in the template tree editor.
+ *
+ * Writes:
+ *   - The dragged level's `dnx_Parent_Assessment_Level` lookup (set to the new
+ *     parent's GUID, or null for top-level).
+ *   - The dragged level's `dnx_assessment_level_order`.
+ *   - Any siblings in the destination bucket whose order ≥ targetOrder get
+ *     bumped up by 1 in parallel to make room.
+ *
+ * Cache is invalidated on success — react-query refetches the levels list.
+ */
+export function useMoveLevel(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      levelId: string;
+      newParentLevelId: string | null;
+      newOrder: number;
+      /** Siblings in the new bucket whose order must shift up by 1. */
+      siblingsToShift?: Dnx_assessment_levels[];
+    }): Promise<void> => {
+      if (params.siblingsToShift && params.siblingsToShift.length > 0) {
+        await Promise.all(
+          params.siblingsToShift.map((s) =>
+            Dnx_assessment_levelsService.update(s.dnx_assessment_levelid, {
+              dnx_assessment_level_order: (s.dnx_assessment_level_order ?? 0) + 1,
+            } as unknown as Partial<Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>>),
+          ),
+        );
+      }
+      const update: Record<string, unknown> = {
+        dnx_assessment_level_order: params.newOrder,
+      };
+      // Re-binding the parent lookup. Per gotcha K, use SchemaName casing.
+      // null is sent when promoting to top-level (rare for our type rules).
+      update['dnx_Parent_Assessment_Level@odata.bind'] = params.newParentLevelId
+        ? `/dnx_assessment_levels(${params.newParentLevelId})`
+        : null;
+      const r = await Dnx_assessment_levelsService.update(
+        params.levelId,
+        update as unknown as Partial<Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>>,
+      );
+      if (!r.success) {
+        console.error('[move level] failed', r.error, update);
+        throw new Error(r.error?.message ?? 'Failed to move level');
+      }
+    },
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: levelKeys.byTemplate(templateId) });
     },
   });

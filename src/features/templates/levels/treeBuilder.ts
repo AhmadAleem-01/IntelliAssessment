@@ -78,15 +78,21 @@ export function nextOrder(siblings: LevelNode[]): number {
  * along with that level's index within the bucket. Returns `undefined` if not
  * found anywhere in the tree. The bucket is returned by reference so callers
  * can compute reorder operations without re-walking the tree.
+ *
+ * `parent` is the LevelNode whose `children` array IS this bucket — null when
+ * the bucket is the top-level `tree` array (i.e. a Section sitting under the
+ * template root). Used by cross-parent drag-and-drop to discover the
+ * destination parent's GUID.
  */
 export function findBucket(
   tree: LevelNode[],
   id: string,
-): { bucket: LevelNode[]; index: number } | undefined {
+  parent: LevelNode | null = null,
+): { bucket: LevelNode[]; index: number; parent: LevelNode | null } | undefined {
   const idx = tree.findIndex((n) => n.level.dnx_assessment_levelid === id);
-  if (idx >= 0) return { bucket: tree, index: idx };
+  if (idx >= 0) return { bucket: tree, index: idx, parent };
   for (const node of tree) {
-    const found = findBucket(node.children, id);
+    const found = findBucket(node.children, id, node);
     if (found) return found;
   }
   return undefined;

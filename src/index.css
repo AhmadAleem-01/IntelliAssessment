@@ -137,6 +137,35 @@ body {
   border-bottom-width: 1px !important;
 }
 
+/* Autosave indicator pulse — used by AssessmentPage save badge */
+@keyframes save-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.1);  }
+}
+
+/*
+ * Conditional-question reveal — animates a question into/out of the
+ * checklist when its visibility rule flips. max-height is set to a
+ * value high enough to fit a tall question (2000px) without clipping;
+ * pointer-events is killed during fade-out so half-faded inputs can't
+ * be interacted with.
+ */
+.reveal {
+  overflow: hidden;
+  transition: max-height 0.24s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+.reveal-show {
+  max-height: 2000px;
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-hide {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+}
+
 /* Sleeker scrollbars */
 ::-webkit-scrollbar {
   width: 10px;

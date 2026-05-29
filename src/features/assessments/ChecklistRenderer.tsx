@@ -10,7 +10,7 @@ import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { DataType, LevelType } from '../templates/levels/levelTypes';
-import { useAssessmentResponses, useUpsertResponse } from './api';
+import { useAssessmentResponses, type useUpsertResponse } from './api';
 import { indexResponses, isQuestionVisible } from './responseHelpers';
 import { QuestionRow } from './QuestionRow';
 
@@ -97,9 +97,11 @@ const useStyles = makeStyles({
 interface Props {
   instanceId: string;
   templateId: string;
+  /** Lifted from AssessmentPage so the autosave indicator can read mutation state. */
+  upsert: ReturnType<typeof useUpsertResponse>;
 }
 
-export function ChecklistRenderer({ instanceId, templateId }: Props) {
+export function ChecklistRenderer({ instanceId, templateId, upsert }: Props) {
   const styles = useStyles();
   const {
     data: levels,
@@ -111,7 +113,6 @@ export function ChecklistRenderer({ instanceId, templateId }: Props) {
     isLoading: respLoading,
     error: respError,
   } = useAssessmentResponses(instanceId);
-  const upsert = useUpsertResponse(instanceId);
 
   if (levelsLoading || respLoading) {
     return <Spinner label="Loading checklist..." size="small" />;
@@ -303,16 +304,23 @@ function QuestionItem({
   onAnswer,
   disabled,
 }: QuestionItemProps) {
-  // Visibility gate — return null when the rule fails.
-  if (!isQuestionVisible(level, levelsById, responsesByLevelId)) return null;
+  // Visibility gate — keep the QuestionRow mounted but animate it in/out.
+  // The `reveal` CSS handles max-height + opacity + a tiny translateY;
+  // pointer-events is disabled during fade so half-hidden inputs are inert.
+  const visible = isQuestionVisible(level, levelsById, responsesByLevelId);
   const response = responsesByLevelId.get(level.dnx_assessment_levelid);
   return (
-    <QuestionRow
-      level={level}
-      response={response}
-      onChange={(value) => onAnswer(level, value)}
-      disabled={disabled}
-    />
+    <div
+      className={`reveal ${visible ? 'reveal-show' : 'reveal-hide'}`}
+      aria-hidden={!visible}
+    >
+      <QuestionRow
+        level={level}
+        response={response}
+        onChange={(value) => onAnswer(level, value)}
+        disabled={disabled}
+      />
+    </div>
   );
 }
 

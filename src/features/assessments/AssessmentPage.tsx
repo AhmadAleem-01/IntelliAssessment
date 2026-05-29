@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Spinner,
@@ -8,8 +9,10 @@ import {
 import {
   ChevronLeft16Regular,
   ClipboardTaskListLtr20Regular,
+  CheckmarkCircle16Filled,
+  ErrorCircle16Filled,
 } from '@fluentui/react-icons';
-import { useAssessmentInstance } from './api';
+import { useAssessmentInstance, useUpsertResponse } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
@@ -133,6 +136,43 @@ const useStyles = makeStyles({
     fontWeight: 500,
     color: 'var(--color-text-primary)',
   },
+  saveBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '3px 10px',
+    borderRadius: 'var(--border-radius-pill)',
+    fontSize: '11px',
+    fontWeight: 500,
+  },
+  saveBadgeIdle: {
+    backgroundColor: 'var(--color-background-secondary)',
+    color: 'var(--color-text-tertiary)',
+  },
+  saveBadgeSaving: {
+    backgroundColor: 'var(--color-purple-soft)',
+    color: 'var(--color-purple-text)',
+  },
+  saveBadgeSaved: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+  },
+  saveBadgeError: {
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
+  },
+  spinDot: {
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: 'currentColor',
+    opacity: 0.6,
+    animationName: 'save-pulse',
+    animationDuration: '0.9s',
+    animationTimingFunction: 'ease-in-out',
+    animationIterationCount: 'infinite',
+  },
 });
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -164,6 +204,16 @@ export function AssessmentPage() {
   const styles = useStyles();
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const { data: assessment, isLoading, error } = useAssessmentInstance(assessmentId);
+
+  // Autosave state — lifted here so the badge in the hero can see the upsert
+  // mutation's status. ChecklistRenderer gets the mutation via prop.
+  const upsert = useUpsertResponse(assessmentId ?? '');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (upsert.isSuccess && upsert.data) {
+      setLastSavedAt(new Date());
+    }
+  }, [upsert.isSuccess, upsert.data]);
 
   if (isLoading) return <Spinner label="Loading assessment..." />;
   if (error) {
@@ -212,6 +262,7 @@ export function AssessmentPage() {
               {assessment.dnx_version !== undefined && assessment.dnx_version !== null && (
                 <span>v{assessment.dnx_version}</span>
               )}
+              <SaveBadge upsert={upsert} lastSavedAt={lastSavedAt} />
             </div>
           </div>
         </div>
@@ -281,7 +332,11 @@ export function AssessmentPage() {
       </div>
 
       {templateId ? (
-        <ChecklistRenderer instanceId={assessment.dnx_assessment_instanceid} templateId={templateId} />
+        <ChecklistRenderer
+          instanceId={assessment.dnx_assessment_instanceid}
+          templateId={templateId}
+          upsert={upsert}
+        />
       ) : (
         <div className={styles.placeholder}>
           <div className={styles.placeholderTitle}>Template missing</div>
@@ -291,4 +346,49 @@ export function AssessmentPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Tiny inline pill that surfaces the autosave state for the checklist.
+ *
+ *   pending   → purple pulse + "Saving..."
+ *   error     → red filled-circle + "Save failed"
+ *   saved     → green checkmark + "Saved at HH:MM"
+ *   nothing yet → muted "Autosave on"
+ */
+interface SaveBadgeProps {
+  upsert: ReturnType<typeof useUpsertResponse>;
+  lastSavedAt: Date | null;
+}
+function SaveBadge({ upsert, lastSavedAt }: SaveBadgeProps) {
+  const styles = useStyles();
+  if (upsert.isPending) {
+    return (
+      <span className={`${styles.saveBadge} ${styles.saveBadgeSaving}`} aria-live="polite">
+        <span className={styles.spinDot} aria-hidden />
+        Saving...
+      </span>
+    );
+  }
+  if (upsert.isError) {
+    return (
+      <span className={`${styles.saveBadge} ${styles.saveBadgeError}`} aria-live="polite">
+        <ErrorCircle16Filled />
+        Save failed — retry
+      </span>
+    );
+  }
+  if (lastSavedAt) {
+    const time = lastSavedAt.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return (
+      <span className={`${styles.saveBadge} ${styles.saveBadgeSaved}`} aria-live="polite">
+        <CheckmarkCircle16Filled />
+        Saved at {time}
+      </span>
+    );
+  }
+  return <span className={`${styles.saveBadge} ${styles.saveBadgeIdle}`}>Autosave on</span>;
 }
