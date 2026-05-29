@@ -1,4 +1,11 @@
-import { makeStyles } from '@fluentui/react-components';
+import {
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  makeStyles,
+} from '@fluentui/react-components';
+import { useAssessmentInstances } from './api';
+import { AssessmentList } from './AssessmentList';
 
 const useStyles = makeStyles({
   header: {
@@ -16,38 +23,35 @@ const useStyles = makeStyles({
     fontSize: '13px',
     marginTop: '4px',
   },
-  empty: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
-    padding: '64px 24px',
-    textAlign: 'center',
-    color: 'var(--color-text-secondary)',
-    fontSize: '13px',
-  },
-  emptyTitle: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
-    marginBottom: '6px',
-  },
 });
 
 export function AssessmentsListPage() {
   const styles = useStyles();
+  const { data, isLoading, error } = useAssessmentInstances();
   return (
     <div>
       <div className={styles.header}>
         <h1 className={styles.title}>Assessments</h1>
         <div className={styles.subtitle}>
-          Live assessment instances across all projects. Milestone 4 enables creation and filtering here.
+          Every live assessment instance across all projects.
         </div>
       </div>
-      <div className={styles.empty}>
-        <div className={styles.emptyTitle}>No instances yet</div>
-        Open a project to start an assessment, or wait for Milestone 4 to land the
-        instance picker.
-      </div>
+
+      {isLoading && <Spinner label="Loading assessments..." />}
+
+      {error && (
+        <MessageBar intent="error">
+          <MessageBarBody>{(error as Error).message}</MessageBarBody>
+        </MessageBar>
+      )}
+
+      {!isLoading && !error && (
+        <AssessmentList
+          items={data ?? []}
+          showProject
+          emptyMessage="No assessments yet. Head to a project to start one."
+        />
+      )}
     </div>
   );
 }

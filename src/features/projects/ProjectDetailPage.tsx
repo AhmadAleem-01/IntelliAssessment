@@ -17,6 +17,10 @@ import { EditProjectDialog } from './EditProjectDialog';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { Dnx_projectsstatuscode } from '../../generated/models/Dnx_projectsModel';
 import { lookupName } from '../../lib/dataverse';
+import { useAssessmentInstancesByProject } from '../assessments/api';
+import { AssessmentList } from '../assessments/AssessmentList';
+import { NewAssessmentDialog } from '../assessments/NewAssessmentDialog';
+import { Add16Regular } from '@fluentui/react-icons';
 
 const useStyles = makeStyles({
   backLink: {
@@ -151,6 +155,24 @@ const useStyles = makeStyles({
     fontSize: '13px',
     backgroundColor: 'var(--color-background-primary)',
   },
+  sectionHeading: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '24px',
+    marginBottom: '12px',
+  },
+  sectionTitle: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+    margin: 0,
+  },
+  sectionSub: {
+    fontSize: '12px',
+    color: 'var(--color-text-secondary)',
+    marginTop: '2px',
+  },
 });
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -165,6 +187,7 @@ export function ProjectDetailPage() {
   const styles = useStyles();
   const { projectId } = useParams<{ projectId: string }>();
   const { data: project, isLoading, error } = useProject(projectId);
+  const { data: assessments } = useAssessmentInstancesByProject(projectId);
 
   if (isLoading) return <Spinner label="Loading project..." />;
   if (error) {
@@ -271,9 +294,28 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className={styles.placeholder}>
-        Assessment instances for this project will appear here in Milestone 4.
+      <div className={styles.sectionHeading}>
+        <div>
+          <h2 className={styles.sectionTitle}>Assessments</h2>
+          <div className={styles.sectionSub}>
+            Live and historical assessment instances for this project.
+          </div>
+        </div>
+        <NewAssessmentDialog
+          projectId={project.dnx_projectid}
+          projectName={project.dnx_project_name}
+          trigger={
+            <Button appearance="primary" icon={<Add16Regular />}>
+              Start assessment
+            </Button>
+          }
+        />
       </div>
+
+      <AssessmentList
+        items={assessments ?? []}
+        emptyMessage="No assessments started yet. Pick a published template to begin."
+      />
     </div>
   );
 }

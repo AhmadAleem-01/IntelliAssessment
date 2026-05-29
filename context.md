@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-29 (M3c shipped).
+> Read this first when returning to the project. Last updated: 2026-05-29 (M4a shipped).
 
 ## What this is
 
@@ -20,7 +20,9 @@ The detailed product spec lives in two places:
 | **M3a** Template tree editor — CRUD | ✅ done | Section / Subsection / Question authoring with inline custom option sets + tooltips + deep-copy duplicate (any node + descendants) |
 | **M3b** Drag-reorder | ✅ done | `@dnd-kit/core` + `@dnd-kit/sortable` integration; same-bucket reorder with optimistic cache + rollback |
 | **M3c** Conditional visibility editor | ✅ done | Author-time rule editor; `dnx_visibility_condition` text column on `dnx_assessment_levels`; runtime evaluator pending in M4 |
-| **M4** Assessment runtime | ⏳ next | Checklist renderer, autosave, conditional logic evaluator |
+| **M4a** Assessment instance CRUD | ✅ done | Start-assessment dialog (picks published template + due date); per-project + global lists; instance shell page with metadata hero |
+| **M4b** Checklist runtime | ⏳ next | Recursive per-data-type field renderer + response load/save (no autosave yet) |
+| **M4c** Autosave + visibility evaluator | not started | Debounced save, version bump, runtime hide/show via `parseVisibility()` |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
 | **M7** Rule engine & scoring | not started | |
@@ -33,7 +35,8 @@ The detailed product spec lives in two places:
 - **Templates** — full CRUD on top-level template records (`Dnx_assessment_templatesService`). Lifecycle status (Draft / Published / Deprecated), **Publish** action that bumps version + stamps `dnx_published_on` (uses `Edm.Date` format, see gotcha B).
 - **Template tree editor** — Section → Subsection → Question authoring under each template via `Dnx_assessment_levelsService`. Contextual add menus respect the allowed-children rules. Question fields support all 5 data types (Boolean / Option set single / Option set multi / Text / Date) with inline custom option sets stored as JSON in `dnx_option_set_reference`. Required flag + Include-in-letter flag (purple dot in tree) + hint text + document-type reference. Cascade-delete walks the subtree depth-first.
 - **Drag-reorder + duplicate** — Drag the 6-dots grip handle on any tree row to reorder within the same parent bucket (sections among sections, subsections within a section, etc.). Cross-parent moves are silently ignored. Reorders write only the rows whose order actually changed; cache updates optimistically with rollback on failure. Each row's kebab menu also exposes **Duplicate**, which deep-copies the subtree (e.g. *Qualification 1* with 4 questions → *Qualification 1 (copy)* with 4 fresh question records) in parallel within each level for fast wide-tree copies. Every icon button has a Fluent tooltip.
-- **Conditional visibility (authoring)** — Each Question's edit dialog has a *Visibility* section. Toggle "Conditional visibility" on, pick a source Question (Boolean / OptionSet / Multiselect), pick an operator (`equals`/`not equals` for single-value sources, `includes`/`does not include` for Multiselect), pick a value from the source's option list. The rule JSON is stored in `dnx_visibility_condition`. The source-question dropdown is grouped by parent path (`Section › Subsection`) using Fluent `OptionGroup` so duplicate question names are disambiguated. Tree rows with a rule configured show an amber **Conditional** pill with a hover tooltip describing the rule. Runtime evaluation is wired in M4.
+- **Conditional visibility (authoring)** — Each Question's edit dialog has a *Visibility* section. Toggle "Conditional visibility" on, pick a source Question (Boolean / OptionSet / Multiselect), pick an operator (`equals`/`not equals` for single-value sources, `includes`/`does not include` for Multiselect), pick a value from the source's option list. The rule JSON is stored in `dnx_visibility_condition`. The source-question dropdown is grouped by parent path (`Section › Subsection`) using Fluent `OptionGroup` so duplicate question names are disambiguated. Tree rows with a rule configured show an amber **Conditional** pill with a hover tooltip describing the rule. Runtime evaluation is wired in M4c.
+- **Assessment instance CRUD** — *Start assessment* button on each project's detail page opens a dialog that lets the user pick a Published template (Draft/Deprecated templates filtered out) and optionally set a due date. Name pre-fills to `<project> — <today>`. On submit, a row is created in `dnx_assessment_instances` with both `dnx_Project` and `dnx_AssessmentTemplate` lookups bound via `@odata.bind`, `statuscode: Draft`, `dnx_outcome: Pending`, `dnx_version: 1`. The project detail page shows all instances under that project; the global `/assessments` page lists every instance across all projects with status pills (Draft / In progress / Pending review / Complete). The instance detail page is a metadata shell — checklist runtime lands in M4b.
 - **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
 - **Assessments** — list page is a stub at `/assessments`; detail page (`/assessments/:id`) is also a stub until M4.
 - **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
@@ -211,7 +214,26 @@ const { transform } = useSortable({ id });
 const style = { transform: CSS.Translate.toString(transform) };
 ```
 
-### M. Custom option sets stored as JSON in an existing text column
+### M. `@odata.bind` "Does Not Exist" 404 means the lookup column points at the wrong table
+
+If a record creation with `@odata.bind` to an existing record fails with `Entity 'X' With Id = <valid GUID> Does Not Exist` — and you can `GET` that same GUID from the same entity set via the SDK — the cause is almost always a **lookup column on the source table pointing at the wrong target table**.
+
+This happens when:
+- A table was renamed or recreated, leaving an orphan duplicate (e.g. both `dnx_project` singular and `dnx_projects` plural exist as actual tables).
+- A lookup was added before the table rename, freezing the lookup's target on the old/wrong table.
+
+The 404 wording is misleading — Dataverse doesn't say "wrong table", it just says "Does Not Exist", because internally the lookup expects the record from a different entity set than the bind URL targets.
+
+**How to verify:** open the lookup column in the maker portal (Tables → source → Columns → the lookup → Edit) and check the **Related table** field. If it's `dnx_projects` (plural) but your SDK reads from `dnx_project` (singular), or vice versa, that's the bug.
+
+**How to fix:** Dataverse won't let you change a lookup's Related table after creation.
+1. Delete the wrong lookup column (existing rows lose the link — usually fine pre-launch).
+2. Add a new lookup column with the same name pointing at the correct table.
+3. Inspect the new relationship's auto-generated SchemaName — confirm the suffix references the correct target table (e.g. `dnx_assessment_instance_Project_dnx_project` not `_dnx_projects`).
+4. Delete the orphan duplicate table once you've confirmed nothing depends on it.
+5. Re-sync: `pac code add-data-source -a dataverse -t <source_table>`.
+
+### N. Custom option sets stored as JSON in an existing text column
 
 `dnx_assessment_levels.dnx_option_set_reference` was originally designed to hold a Dataverse choice logical name, but assessment authors often want inline custom option lists. We re-use the same text column to store a JSON-encoded array of label strings:
 
@@ -272,25 +294,27 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-The entire **M3 template authoring track is shipped** (CRUD, duplicate, drag-reorder, conditional-visibility authoring). The natural next milestone is **M4 — Assessment Runtime**.
+**M4a is shipped** (assessment instance CRUD + shell page). The next chunk is **M4b — Checklist runtime**: render the template's level tree as a fillable checklist, load existing responses, and let the user enter answers.
 
-Concrete starting tasks:
+Concrete starting tasks for M4b:
 
-1. **`useAssessment(instanceId)` + `useAssessmentResponses(instanceId)` hooks** filtering `dnx_assessment_responses` by parent instance.
-2. **`ChecklistRenderer.tsx`** that walks the template's level tree and renders per-data-type controls:
-   - Boolean → `Yes` / `No` toggle group (green/red on selected per design.md §6)
-   - OptionSet single → Dropdown of `parseOptions(level.dnx_option_set_reference)`
-   - OptionSet multi → Checkbox group (selections stored as JSON array)
-   - Text → `Input`
-   - Multi-line text → `Textarea` with `resize: vertical`
-   - Date → `<input type="date">`
-3. **Visibility evaluator** that reads `parseVisibility(level.dnx_visibility_condition)` (already shipped) and consults the current response value of the referenced source question. Hide the question DOM element when the rule fails. Re-evaluate on every response change. Multiselect parents follow contains-semantics per the contract in `visibility.ts`.
-4. **Autosave** — debounced React Query mutation (1.5 s) per field change, writes to `dnx_assessment_responses` (`response_text` / `response_boolean` / `response_option` / `response_multi` / `response_date` depending on data type), bumps `dnx_assessment_instances.dnx_version`.
-5. **Assessment instance creation** — currently `/assessments/:id` is a stub. Add a "Start assessment" CTA on the project detail page that picks a published template, creates a fresh `dnx_assessment_instances` record bound to the project, and navigates to the new instance.
+1. **`useAssessmentResponses(instanceId)` hook** — filter `dnx_assessment_responses` by `_dnx_assessment_value` (the instance lookup). Returns the array; M4c does the autosave write path.
+2. **Per-data-type field components** in `src/features/assessments/fields/`:
+   - `BooleanField` — green Yes / red No toggle group per design.md §6
+   - `OptionSetField` — Dropdown of `parseOptions(level.dnx_option_set_reference)`
+   - `MultiSelectField` — Checkbox group; selections persisted as JSON array
+   - `TextField` — single-line `Input`
+   - `TextareaField` — multi-line textarea (use the question's data type to decide — design.md treats Text + Multi-line as one column)
+   - `DateField` — `<input type="date">`
+3. **`ChecklistRenderer.tsx`** — recursive walk over the level tree (use the existing `buildTree()` from `src/features/templates/levels/treeBuilder.ts`). Section → collapse/expand; Subsection → grouped block; Question → label + hint + the right field component, plus an AI tag and "include in letter" purple dot per design.md §5.3.
+4. **Replace the M4a placeholder card** on the instance page with `<ChecklistRenderer>`.
+5. **Visibility hiding (read-only)** — apply `parseVisibility(level.dnx_visibility_condition)` against the current responses to hide questions that don't match. Multiselect parents use contains-semantics per the contract in `visibility.ts`. Re-evaluate on every response change. (Autosave + version bump comes in M4c.)
+
+M4c builds on top: debounce a React Query mutation per field-change to write to `dnx_assessment_responses` (`response_text` / `response_boolean` / `response_option` / `response_multi` / `response_date` per data type), bump `dnx_assessment_instances.dnx_version`, surface a small autosave badge.
 
 Smaller polish items that could slot in any time:
 
-- **Cross-parent drag-and-drop** (currently same-bucket only — silently ignores cross-parent drops).
+- **Cross-parent drag-and-drop** for the template tree (currently same-bucket only).
 - **Insert duplicate adjacent to source** instead of appending to the bucket end.
 - **Code-split with React.lazy()** — bundle is ~830 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
 - **Multi-value visibility rules** — currently a rule has a single RHS value. The runtime contract is forward-compatible (`value: string[]` would migrate cleanly with a parser update). Add when there's actual demand.
