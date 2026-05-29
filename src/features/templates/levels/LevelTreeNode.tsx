@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { makeStyles, Menu, MenuList, MenuPopover, MenuTrigger, MenuItem } from '@fluentui/react-components';
+import {
+  makeStyles,
+  Menu,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  MenuItem,
+  Tooltip,
+} from '@fluentui/react-components';
 import {
   ChevronDown16Regular,
   ChevronRight16Regular,
@@ -7,7 +15,11 @@ import {
   Add16Regular,
   Edit16Regular,
   Delete16Regular,
+  Copy16Regular,
+  ReOrderDotsVertical16Regular,
 } from '@fluentui/react-icons';
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { LevelNode } from './treeBuilder';
 import {
   LEVEL_TYPE_LABEL,
@@ -39,6 +51,41 @@ const useStyles = makeStyles({
     },
     ':hover .level-actions': {
       opacity: 1,
+    },
+    ':hover .level-drag-handle': {
+      opacity: 1,
+    },
+  },
+  rowDragging: {
+    /* While the row is being dragged it floats above the rest. */
+    backgroundColor: 'var(--color-background-primary)',
+    border: '0.5px solid var(--color-purple)',
+    boxShadow: '0 4px 12px rgba(127, 119, 221, 0.2)',
+    zIndex: 10,
+    position: 'relative',
+  },
+  dragHandle: {
+    width: '20px',
+    height: '24px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--color-text-tertiary)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    padding: 0,
+    cursor: 'grab',
+    flexShrink: 0,
+    opacity: 0,
+    transition: 'opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease',
+    touchAction: 'none',
+    ':hover': {
+      color: 'var(--color-text-primary)',
+      backgroundColor: 'var(--color-background-tertiary)',
+    },
+    ':active': {
+      cursor: 'grabbing',
     },
   },
   chevronBtn: {
@@ -152,9 +199,22 @@ interface Props {
   onAddChild: (parent: LevelNode, childType: LevelType) => void;
   onEdit: (node: LevelNode) => void;
   onDelete: (node: LevelNode) => void;
+  onDuplicate: (node: LevelNode) => void;
+  /**
+   * Marker so all nodes know a duplicate is in flight (disables the menu item
+   * everywhere). Set to '*' while pending, null otherwise.
+   */
+  duplicatingId: string | null;
 }
 
-export function LevelTreeNode({ node, onAddChild, onEdit, onDelete }: Props) {
+export function LevelTreeNode({
+  node,
+  onAddChild,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  duplicatingId,
+}: Props) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(true);
   const { level } = node;
@@ -168,18 +228,58 @@ export function LevelTreeNode({ node, onAddChild, onEdit, onDelete }: Props) {
       ? parseOptions(level.dnx_option_set_reference).length
       : 0;
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: level.dnx_assessment_levelid });
+
+  // Use Translate (not Transform) so the dragged row only moves — never scales.
+  // Variable-height siblings (an expanded section next to a tiny question) would
+  // otherwise squish/stretch as dnd-kit tries to size the drag image to its
+  // over-target.
+  const rowStyle: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
   return (
-    <div className={styles.node}>
-      <div className={styles.row}>
-        {hasChildren ? (
+    <div ref={setNodeRef} className={styles.node} style={rowStyle}>
+      <div className={`${styles.row} ${isDragging ? styles.rowDragging : ''}`}>
+        <Tooltip
+          content="Drag to reorder"
+          relationship="label"
+          positioning="below"
+          withArrow
+        >
           <button
             type="button"
-            className={styles.chevronBtn}
-            onClick={() => setExpanded((v) => !v)}
-            aria-label={expanded ? 'Collapse' : 'Expand'}
+            className={`${styles.dragHandle} level-drag-handle`}
+            {...attributes}
+            {...listeners}
           >
-            {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+            <ReOrderDotsVertical16Regular />
           </button>
+        </Tooltip>
+        {hasChildren ? (
+          <Tooltip
+            content={expanded ? 'Collapse' : 'Expand'}
+            relationship="label"
+            positioning="below"
+            withArrow
+          >
+            <button
+              type="button"
+              className={styles.chevronBtn}
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+            </button>
+          </Tooltip>
         ) : (
           <span className={styles.chevronSpacer} />
         )}
@@ -244,9 +344,20 @@ export function LevelTreeNode({ node, onAddChild, onEdit, onDelete }: Props) {
           {allowChildren.length > 0 && (
             <Menu>
               <MenuTrigger disableButtonEnhancement>
-                <button type="button" className={styles.iconBtn} aria-label="Add child">
-                  <Add16Regular />
-                </button>
+                <Tooltip
+                  content={
+                    allowChildren.length === 1
+                      ? `Add ${LEVEL_TYPE_LABEL[allowChildren[0]].toLowerCase()}`
+                      : `Add ${LEVEL_TYPE_LABEL[allowChildren[0]].toLowerCase()} or ${LEVEL_TYPE_LABEL[allowChildren[1]].toLowerCase()}`
+                  }
+                  relationship="label"
+                  positioning="below"
+                  withArrow
+                >
+                  <button type="button" className={styles.iconBtn}>
+                    <Add16Regular />
+                  </button>
+                </Tooltip>
               </MenuTrigger>
               <MenuPopover>
                 <MenuList>
@@ -259,27 +370,48 @@ export function LevelTreeNode({ node, onAddChild, onEdit, onDelete }: Props) {
               </MenuPopover>
             </Menu>
           )}
-          <button
-            type="button"
-            className={styles.iconBtn}
-            aria-label="Edit"
-            onClick={() => onEdit(node)}
+          <Tooltip
+            content={`Edit ${LEVEL_TYPE_LABEL[levelType].toLowerCase()}`}
+            relationship="label"
+            positioning="below"
+            withArrow
           >
-            <Edit16Regular />
-          </button>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              onClick={() => onEdit(node)}
+            >
+              <Edit16Regular />
+            </button>
+          </Tooltip>
           <Menu>
             <MenuTrigger disableButtonEnhancement>
-              <button type="button" className={styles.iconBtn} aria-label="More actions">
-                <MoreVertical16Regular />
-              </button>
+              <Tooltip
+                content="More actions"
+                relationship="label"
+                positioning="below"
+                withArrow
+              >
+                <button type="button" className={styles.iconBtn}>
+                  <MoreVertical16Regular />
+                </button>
+              </Tooltip>
             </MenuTrigger>
             <MenuPopover>
               <MenuList>
                 <MenuItem
+                  onClick={() => onDuplicate(node)}
+                  disabled={duplicatingId !== null}
+                  icon={<Copy16Regular />}
+                >
+                  {duplicatingId !== null ? 'Duplicating...' : 'Duplicate'}
+                </MenuItem>
+                <MenuItem
                   onClick={() => onDelete(node)}
                   style={{ color: 'var(--color-red-text)' }}
+                  icon={<Delete16Regular />}
                 >
-                  <Delete16Regular /> &nbsp;Delete
+                  Delete
                 </MenuItem>
               </MenuList>
             </MenuPopover>
@@ -288,17 +420,24 @@ export function LevelTreeNode({ node, onAddChild, onEdit, onDelete }: Props) {
       </div>
 
       {hasChildren && expanded && (
-        <div className={styles.children}>
-          {node.children.map((child) => (
-            <LevelTreeNode
-              key={child.level.dnx_assessment_levelid}
-              node={child}
-              onAddChild={onAddChild}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
+        <SortableContext
+          items={node.children.map((c) => c.level.dnx_assessment_levelid)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className={styles.children}>
+            {node.children.map((child) => (
+              <LevelTreeNode
+                key={child.level.dnx_assessment_levelid}
+                node={child}
+                onAddChild={onAddChild}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onDuplicate={onDuplicate}
+                duplicatingId={duplicatingId}
+              />
+            ))}
+          </div>
+        </SortableContext>
       )}
     </div>
   );

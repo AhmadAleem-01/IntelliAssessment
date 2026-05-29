@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-26.
+> Read this first when returning to the project. Last updated: 2026-05-29.
 
 ## What this is
 
@@ -17,9 +17,9 @@ The detailed product spec lives in two places:
 | **M0** Environment & foundations | ✅ done (by user) | Dataverse env provisioned, schemas synced to `.power/schemas/dataverse/` |
 | **M1** Dataverse schema | ✅ done (by user) | All 10 entities present; generated TS services in `src/generated/` |
 | **M2** App shell, auth, routing | ✅ done | Custom purple theme, 52 px sticky topbar, flat surfaces per `design.md` |
-| **M3a** Template tree editor — CRUD | ✅ done | Section / Subsection / Question authoring with inline custom option sets |
-| **M3b** Drag-reorder | ⏳ next | Needs `@dnd-kit/core`; will update `dnx_assessment_level_order` on drop |
-| **M3c** Conditional visibility editor | not started | Show a question only when a parent answer matches; needs storage decision |
+| **M3a** Template tree editor — CRUD | ✅ done | Section / Subsection / Question authoring with inline custom option sets + tooltips + deep-copy duplicate (any node + descendants) |
+| **M3b** Drag-reorder | ✅ done | `@dnd-kit/core` + `@dnd-kit/sortable` integration; same-bucket reorder with optimistic cache + rollback |
+| **M3c** Conditional visibility editor | ⏳ next | Show a question only when a parent answer matches; needs storage decision |
 | **M4** Assessment runtime | not started | Checklist renderer, autosave, conditional logic at runtime |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
@@ -32,6 +32,7 @@ The detailed product spec lives in two places:
 - **Projects** — full CRUD (list, detail, create, edit, delete) wired to `Dnx_projectsService`. Flat cards with status pills (Active / On Hold / Archived / Inactive).
 - **Templates** — full CRUD on top-level template records (`Dnx_assessment_templatesService`). Lifecycle status (Draft / Published / Deprecated), **Publish** action that bumps version + stamps `dnx_published_on` (uses `Edm.Date` format, see gotcha B).
 - **Template tree editor** — Section → Subsection → Question authoring under each template via `Dnx_assessment_levelsService`. Contextual add menus respect the allowed-children rules. Question fields support all 5 data types (Boolean / Option set single / Option set multi / Text / Date) with inline custom option sets stored as JSON in `dnx_option_set_reference`. Required flag + Include-in-letter flag (purple dot in tree) + hint text + document-type reference. Cascade-delete walks the subtree depth-first.
+- **Drag-reorder + duplicate** — Drag the 6-dots grip handle on any tree row to reorder within the same parent bucket (sections among sections, subsections within a section, etc.). Cross-parent moves are silently ignored. Reorders write only the rows whose order actually changed; cache updates optimistically with rollback on failure. Each row's kebab menu also exposes **Duplicate**, which deep-copies the subtree (e.g. *Qualification 1* with 4 questions → *Qualification 1 (copy)* with 4 fresh question records) in parallel within each level for fast wide-tree copies. Every icon button has a Fluent tooltip.
 - **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
 - **Assessments** — list page is a stub at `/assessments`; detail page (`/assessments/:id`) is also a stub until M4.
 - **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
@@ -45,6 +46,7 @@ The detailed product spec lives in two places:
 - **@tanstack/react-query** — server-state + cache invalidation pattern
 - **react-router-dom v7** — routing
 - **@fluentui/react-icons** — iconography
+- **@dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities** — drag-and-drop reorder for the tree editor
 
 ## Key directories
 
@@ -194,7 +196,21 @@ const record = {
 
 The generated `<Entity>Base` interface includes the `"<SchemaName>@odata.bind"?: string` field for each lookup — use that as a hint for the right key.
 
-### L. Custom option sets stored as JSON in an existing text column
+### L. Use `CSS.Translate.toString()` (not `Transform`) for dnd-kit drag styles
+
+`@dnd-kit/utilities` exports two helpers for serializing a sortable item's `transform`:
+
+- `CSS.Transform.toString(transform)` → `translate3d(...) scaleX(...) scaleY(...)`
+- `CSS.Translate.toString(transform)` → `translate3d(...)` only
+
+For nested trees with siblings of vastly different heights (e.g. a tall expanded Section next to a single-row Question), `Transform` scales the dragged element to match its over-target — producing a visible "squish/stretch" while dragging. Use `Translate` for pure motion.
+
+```tsx
+const { transform } = useSortable({ id });
+const style = { transform: CSS.Translate.toString(transform) };
+```
+
+### M. Custom option sets stored as JSON in an existing text column
 
 `dnx_assessment_levels.dnx_option_set_reference` was originally designed to hold a Dataverse choice logical name, but assessment authors often want inline custom option lists. We re-use the same text column to store a JSON-encoded array of label strings:
 
@@ -255,13 +271,17 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-The tree editor (M3a) is complete. Two natural next steps, in order of value:
+M3a (tree CRUD + duplicate) and M3b (drag-reorder) are both shipped. Two natural next paths, ranked by user-visible value:
 
-1. **M3b — Drag-reorder.** Install `@dnd-kit/core` and `@dnd-kit/sortable`. Make sibling levels draggable within their parent bucket (Section reordering within the template; Subsection reordering within a Section; Question reordering within a Section or Subsection). On drop, fire a batched update that recomputes `dnx_assessment_level_order` for the affected siblings. Cross-parent moves are nice-to-have but not required for v1.
+1. **M4 — Assessment Runtime.** Render the template tree as a fillable checklist with per-data-type input components (Boolean toggle, OptionSet single/multi, Text, Date) and autosave responses to `dnx_assessment_responses`. This is where the product becomes end-to-end usable for an assessor. Bring forward the autosave pattern noted in the plan (debounced React Query mutation + version-bump on `Dnx_assessment_instances`).
 
-2. **M3c — Conditional visibility editor.** Let a question declare "show only when parent question X = value Y". Needs a storage decision — likely a new JSON column on `dnx_assessment_levels` (e.g. `dnx_visibility_condition` as text), or fold into `dnx_description` as JSON. Then a small `<VisibilityRuleEditor>` in the LevelDialog under a collapsible "Visibility" group, plus a parser ready for the runtime evaluator in M4.
+2. **M3c — Conditional visibility editor.** Let a question declare "show only when parent question X = value Y". Needs a storage decision — likely a new JSON column on `dnx_assessment_levels` (e.g. `dnx_visibility_condition` as text), or fold into `dnx_description` as JSON. Then a small `<VisibilityRuleEditor>` in the LevelDialog under a collapsible "Visibility" group, plus a parser ready for the runtime evaluator in M4. Worth doing only if there's appetite to build the conditional editor BEFORE the runtime — otherwise tackle it inside M4 where you can validate end-to-end.
 
-Alternative if the user wants to see end-to-end value sooner: jump to **M4 (Assessment Runtime)** — render the template tree as a fillable checklist with per-data-type input components and autosave to `dnx_assessment_responses`. Drag-reorder and conditional logic can come back later.
+Smaller polish items that could slot in either way:
+
+- **Cross-parent drag-and-drop** (currently same-bucket only — silently ignores cross-parent drops).
+- **Insert duplicate adjacent to source** instead of appending to the bucket end.
+- **Code-split with React.lazy()** — bundle is ~820 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
 
 ## Useful links
 

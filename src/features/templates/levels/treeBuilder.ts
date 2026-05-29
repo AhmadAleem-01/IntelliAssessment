@@ -72,3 +72,22 @@ export function nextOrder(siblings: LevelNode[]): number {
   if (siblings.length === 0) return 0;
   return Math.max(...siblings.map((s) => s.level.dnx_assessment_level_order ?? 0)) + 1;
 }
+
+/**
+ * Locate the sibling bucket (parent's children) that contains a given level id,
+ * along with that level's index within the bucket. Returns `undefined` if not
+ * found anywhere in the tree. The bucket is returned by reference so callers
+ * can compute reorder operations without re-walking the tree.
+ */
+export function findBucket(
+  tree: LevelNode[],
+  id: string,
+): { bucket: LevelNode[]; index: number } | undefined {
+  const idx = tree.findIndex((n) => n.level.dnx_assessment_levelid === id);
+  if (idx >= 0) return { bucket: tree, index: idx };
+  for (const node of tree) {
+    const found = findBucket(node.children, id);
+    if (found) return found;
+  }
+  return undefined;
+}
