@@ -441,18 +441,37 @@ export function LevelDialog(props: Props) {
                 )}
 
                 {!isQuestion && (
-                  <div className={styles.switchRow}>
-                    <div>
-                      <div className={styles.switchLabel}>Lock when complete</div>
-                      <div className={styles.switchHint}>
-                        Section becomes read-only once the reviewer signs off.
+                  <>
+                    <div className={styles.switchRow}>
+                      <div>
+                        <div className={styles.switchLabel}>Lock when complete</div>
+                        <div className={styles.switchHint}>
+                          Section becomes read-only once the reviewer signs off.
+                        </div>
                       </div>
+                      <Switch
+                        checked={!!form.isReadOnly}
+                        onChange={(_, d) => patch({ isReadOnly: d.checked })}
+                      />
                     </div>
-                    <Switch
-                      checked={!!form.isReadOnly}
-                      onChange={(_, d) => patch({ isReadOnly: d.checked })}
-                    />
-                  </div>
+
+                    <div className={styles.sectionDivider} />
+                    <div className={styles.sectionLabel}>Evaluation</div>
+                    {isEdit ? (
+                      <CriteriaEditor level={props.level} />
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--color-text-secondary)',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        Roll-up rules can be added after this level is created.
+                        Save first, then reopen to configure scoring.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </DialogContent>

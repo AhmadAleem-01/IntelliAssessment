@@ -25,38 +25,70 @@ export const OUTCOME_FAIL = {
 } as const;
 export type OutcomeFailKey = keyof typeof OUTCOME_FAIL;
 
-/** What the evaluator returns for a single question. */
+/** Maps the dnx_scoring_type picklist. */
+export const SCORING_TYPE = {
+  Weighted: 0,
+  Grouped: 1,
+  Boolean: 2,
+} as const;
+export type ScoringTypeKey = keyof typeof SCORING_TYPE;
+
+/**
+ * What the evaluator returns for any single level (question, sub, section).
+ * `explanation` is a short human-readable phrase the UI can surface on the
+ * chip's tooltip — e.g. "Answer 'Yes' satisfies 'Is true'" for a question or
+ * "3 of 4 children passed (75%) ≥ 50% threshold" for a weighted parent.
+ */
 export type EvaluationOutcome =
-  | { kind: 'pass'; label: string }
-  | { kind: 'fail'; label: string }
-  | { kind: 'not-evaluable'; reason: 'no-criteria' | 'no-answer' | 'bad-config' };
+  | { kind: 'pass'; label: string; explanation?: string }
+  | { kind: 'fail'; label: string; explanation?: string }
+  | {
+      kind: 'not-evaluable';
+      reason: 'no-criteria' | 'no-answer' | 'bad-config' | 'no-children';
+      explanation?: string;
+    };
 
 /**
  * Friendly client-side criteria shape. Reads from the Dataverse row but
  * normalises optional fields so the evaluator doesn't have to keep
  * null-checking. The engine consumes this; the API hooks produce it.
+ *
+ * Used at every level — Question (operator + targetValue), Subsection / Section
+ * (scoringType + passThreshold roll up child outcomes). Unused fields per level
+ * type are simply ignored by the evaluator.
  */
 export interface Criteria {
   id: string;
   levelId: string;
   name: string;
+  /** Question-level only. Ignored when scoringType !== 'Boolean'. */
   operator: OperatorKey;
   /** Lossy: stored as a string in Dataverse; parsed per question data type. */
   targetValue: string;
   outcomeIfPass: OutcomePassKey;
   outcomeIfFail: OutcomeFailKey;
+  /** How child outcomes are aggregated. 'Boolean' = must-all-pass (default). */
+  scoringType: ScoringTypeKey;
+  /** 0..1 — used by Weighted scoring. e.g. 0.5 = ≥ 50% of children must pass. */
+  passThreshold: number;
+  /** 0..N — this level's weight when its parent aggregates with Weighted. */
+  weight: number;
 }
 
+// Schema keeps Met / Suitable / Pass as three picklist values for historical
+// compatibility, but the UI surfaces only one — every passing outcome reads as
+// "Suitable" and every failing outcome as "Not suitable" so the chips stay
+// consistent across legacy rows and new ones.
 export const OUTCOME_PASS_LABEL: Record<OutcomePassKey, string> = {
-  Met: 'Met',
+  Met: 'Suitable',
   Suitable: 'Suitable',
-  Pass: 'Pass',
+  Pass: 'Suitable',
 };
 
 export const OUTCOME_FAIL_LABEL: Record<OutcomeFailKey, string> = {
-  NotMet: 'Not met',
+  NotMet: 'Not suitable',
   NotSuitable: 'Not suitable',
-  Fail: 'Fail',
+  Fail: 'Not suitable',
 };
 
 export const OPERATOR_LABEL: Record<OperatorKey, string> = {

@@ -4,6 +4,7 @@ import {
   MessageBar,
   MessageBarBody,
   Button,
+  Tooltip,
   makeStyles,
 } from '@fluentui/react-components';
 import {
@@ -29,7 +30,8 @@ import { indexResponses, isQuestionVisible, hasAnswer } from './responseHelpers'
 import { lookupId } from '../../lib/dataverse';
 import { QuestionRow } from './QuestionRow';
 import { useCriteriaForLevels } from '../rules/api';
-import type { Criteria } from '../rules/types';
+import type { Criteria, EvaluationOutcome } from '../rules/types';
+import { evaluateNode, evaluateAssessment } from '../rules/engine';
 
 const useStyles = makeStyles({
   root: {
@@ -204,7 +206,73 @@ const useStyles = makeStyles({
     border: '0.5px dashed var(--color-border-secondary)',
     borderRadius: 'var(--border-radius-lg)',
   },
+  outcomeChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.02em',
+    lineHeight: 1.3,
+    flexShrink: 0,
+  },
+  overallBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--color-background-secondary)',
+    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--border-radius-lg)',
+    marginBottom: '4px',
+  },
+  overallLabel: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'var(--color-text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+  },
+  overallHint: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    flex: 1,
+  },
+  outcomeChipPass: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+    border: '0.5px solid var(--color-green)',
+  },
+  outcomeChipFail: {
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
+    border: '0.5px solid var(--color-red)',
+  },
 });
+
+/**
+ * Small shared chip used on section / subsection headers + the hero. Mirrors
+ * the shape of the one inline in QuestionRow but lives here so the cascade
+ * can render them at multiple tree depths without duplicating style.
+ */
+function OutcomeChip({ outcome }: { outcome: EvaluationOutcome }) {
+  const styles = useStyles();
+  if (outcome.kind !== 'pass' && outcome.kind !== 'fail') return null;
+  const chipClass = `${styles.outcomeChip} ${
+    outcome.kind === 'pass' ? styles.outcomeChipPass : styles.outcomeChipFail
+  }`;
+  const chip = <span className={chipClass}>{outcome.label}</span>;
+  if (!outcome.explanation) return chip;
+  // `relationship="description"` is the right ARIA semantic — the tooltip
+  // describes *why* the chip says what it says, not an alternative label.
+  return (
+    <Tooltip content={outcome.explanation} relationship="description" withArrow>
+      {chip}
+    </Tooltip>
+  );
+}
 
 interface Props {
   instanceId: string;
@@ -296,15 +364,13 @@ export function ChecklistRenderer({
     error: respError,
   } = useAssessmentResponses(instanceId);
 
-  // All Question-type level ids — used to pull evaluation criteria in one shot.
-  const questionLevelIds = useMemo(
-    () =>
-      (levels ?? [])
-        .filter((l) => (l.dnx_assessment_level_type as LevelType) === 3)
-        .map((l) => l.dnx_assessment_levelid),
+  // Every level id — we now load criteria for questions AND parents so the
+  // cascade can roll up subsection / section / assessment outcomes.
+  const allLevelIds = useMemo(
+    () => (levels ?? []).map((l) => l.dnx_assessment_levelid),
     [levels],
   );
-  const { data: criteriaByLevelId } = useCriteriaForLevels(questionLevelIds);
+  const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
 
   if (levelsLoading || respLoading) {
     return <Spinner label="Loading checklist..." size="small" />;
@@ -339,9 +405,25 @@ export function ChecklistRenderer({
   const levelsById = new Map<string, Dnx_assessment_levels>(
     (levels ?? []).map((l) => [l.dnx_assessment_levelid, l] as const),
   );
+  // Overall outcome rolls up every top-level section. Live preview only —
+  // persistence happens through the reviewer Approve flow.
+  const overallOutcome = evaluateAssessment(
+    tree,
+    criteriaByLevelId,
+    responsesByLevelId,
+  );
 
   return (
     <div className={styles.root}>
+      {(overallOutcome.kind === 'pass' || overallOutcome.kind === 'fail') && (
+        <div className={styles.overallBanner}>
+          <span className={styles.overallLabel}>Overall outcome</span>
+          <OutcomeChip outcome={overallOutcome} />
+          <span className={styles.overallHint}>
+            Live preview based on the answers below.
+          </span>
+        </div>
+      )}
       {totalFlaggedQuestions > 0 && (
         <div className={styles.flagsBanner}>
           <span className={styles.lockIcon}>
@@ -474,6 +556,7 @@ function SectionBlock({
 
   // Visible-question counts for the section header summary line.
   const counts = countVisibleAnswered(node, levelsById, responsesByLevelId);
+  const outcome = evaluateNode(node, criteriaByLevelId, responsesByLevelId);
 
   return (
     <div className={styles.section}>
@@ -493,6 +576,7 @@ function SectionBlock({
           {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
         </button>
         <span className={styles.sectionLabel}>{node.level.dnx_name}</span>
+        <OutcomeChip outcome={outcome} />
         <span className={styles.sectionMeta}>
           {counts.answered} / {counts.visible} answered
         </span>
@@ -553,6 +637,7 @@ function SubsectionBlock({
   const [expanded, setExpanded] = useState(true);
   // Per-subsection counts so a long section is easier to scan.
   const counts = countVisibleAnswered(node, levelsById, responsesByLevelId);
+  const outcome = evaluateNode(node, criteriaByLevelId, responsesByLevelId);
   return (
     <div className={styles.subsection}>
       <div
@@ -582,6 +667,7 @@ function SubsectionBlock({
         <span className={styles.subsectionBullet} aria-hidden />
         <span className={styles.subsectionLabel}>Subsection</span>
         <span className={styles.subsectionTitle}>{node.level.dnx_name}</span>
+        <OutcomeChip outcome={outcome} />
         <span className={styles.subsectionLabel}>
           {counts.answered}/{counts.visible}
         </span>

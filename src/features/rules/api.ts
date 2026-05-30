@@ -9,10 +9,12 @@ import {
   OPERATOR,
   OUTCOME_PASS,
   OUTCOME_FAIL,
+  SCORING_TYPE,
   type Criteria,
   type OperatorKey,
   type OutcomePassKey,
   type OutcomeFailKey,
+  type ScoringTypeKey,
 } from './types';
 
 export const criteriaKeys = {
@@ -24,20 +26,38 @@ export const criteriaKeys = {
 function toCriteria(row: Dnx_evaluationcriterias): Criteria | null {
   const levelId = lookupId(row, 'dnx_assessment_level');
   if (!levelId) return null;
-  const op = row.dnx_operator;
-  if (op === undefined || op === null) return null;
   const pass = row.dnx_outcome_if_pass;
   const fail = row.dnx_outcome_if_fail;
   if (pass === undefined || pass === null) return null;
   if (fail === undefined || fail === null) return null;
+  // Operator may be absent for non-question rules — default to Equals so the
+  // type stays narrow; the evaluator skips it when scoringType !== Boolean.
+  const op = row.dnx_operator;
   return {
     id: row.dnx_evaluationcriteriaid,
     levelId,
     name: row.dnx_criteria_name,
-    operator: keyOf(OPERATOR, op) as OperatorKey,
+    operator:
+      op === undefined || op === null
+        ? 'Equals'
+        : (keyOf(OPERATOR, op) as OperatorKey),
     targetValue: row.dnx_target_value ?? '',
     outcomeIfPass: keyOf(OUTCOME_PASS, pass) as OutcomePassKey,
     outcomeIfFail: keyOf(OUTCOME_FAIL, fail) as OutcomeFailKey,
+    scoringType:
+      row.dnx_scoring_type === undefined || row.dnx_scoring_type === null
+        ? 'Boolean'
+        : (keyOf(SCORING_TYPE, row.dnx_scoring_type) as ScoringTypeKey),
+    // Dataverse decimals come back as numbers in current versions of the
+    // generated client; defensively coerce for the rare string case.
+    passThreshold:
+      typeof row.dnx_pass_threshold === 'number'
+        ? row.dnx_pass_threshold
+        : parseFloat(String(row.dnx_pass_threshold ?? '0.5')) || 0.5,
+    weight:
+      typeof row.dnx_weight === 'number'
+        ? row.dnx_weight
+        : parseFloat(String(row.dnx_weight ?? '1')) || 1,
   };
 }
 
@@ -109,10 +129,23 @@ export interface UpsertCriteriaInput {
   id?: string;
   levelId: string;
   name: string;
+  /** Question-level only. Other levels can pass any value (it'll be ignored). */
   operator: OperatorKey;
   targetValue: string;
   outcomeIfPass: OutcomePassKey;
   outcomeIfFail: OutcomeFailKey;
+  scoringType: ScoringTypeKey;
+  /** 0..1 — Weighted scoring pass ratio. */
+  passThreshold: number;
+  /** 0..N — how this level counts when its parent aggregates. */
+  weight: number;
+  /**
+   * Question Value (0) for question rules, Subsection Outcome (1) for
+   * subsection rules, Section Outcome (2) for section rules. The evaluator
+   * doesn't read it back today; it's there for the future server cascade
+   * + reporting filters.
+   */
+  sourceType: 0 | 1 | 2;
 }
 
 export function useUpsertCriteria(levelId: string) {
@@ -129,9 +162,10 @@ export function useUpsertCriteria(levelId: string) {
         dnx_target_value: input.targetValue,
         dnx_outcome_if_pass: OUTCOME_PASS[input.outcomeIfPass],
         dnx_outcome_if_fail: OUTCOME_FAIL[input.outcomeIfFail],
-        // M7a is always Boolean scoring on the question itself.
-        dnx_scoring_type: 2,
-        dnx_source_type: 0,
+        dnx_scoring_type: SCORING_TYPE[input.scoringType],
+        dnx_source_type: input.sourceType,
+        dnx_pass_threshold: input.passThreshold,
+        dnx_weight: input.weight,
       } as unknown as Partial<Dnx_evaluationcriteriasBase>;
 
       if (input.id) {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Spinner,
@@ -19,6 +20,7 @@ import { DeleteTemplateDialog } from './DeleteTemplateDialog';
 import { Dnx_assessment_templatesstatuscode } from '../../generated/models/Dnx_assessment_templatesModel';
 import { lookupName } from '../../lib/dataverse';
 import { LevelTree } from './levels/LevelTree';
+import { ScoringMatrix } from '../rules/ScoringMatrix';
 
 const useStyles = makeStyles({
   backLink: {
@@ -30,6 +32,29 @@ const useStyles = makeStyles({
     textDecoration: 'none',
     marginBottom: '14px',
     ':hover': { color: 'var(--color-text-primary)' },
+  },
+  tabs: {
+    display: 'flex',
+    gap: '4px',
+    marginBottom: '14px',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+  },
+  tab: {
+    border: 'none',
+    background: 'transparent',
+    padding: '8px 14px',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: 'var(--color-text-secondary)',
+    cursor: 'pointer',
+    borderBottom: '2px solid transparent',
+    marginBottom: '-1px',
+    transition: 'color 0.1s ease, border-color 0.1s ease',
+    ':hover': { color: 'var(--color-text-primary)' },
+  },
+  tabActive: {
+    color: 'var(--color-purple-text)',
+    borderBottom: '2px solid var(--color-purple)',
   },
   header: {
     display: 'flex',
@@ -162,6 +187,10 @@ export function TemplateEditorPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const { data: template, isLoading, error } = useTemplate(templateId);
   const publish = usePublishTemplate(templateId ?? '');
+  // Two views over the same template — Structure (tree authoring) vs
+  // Scoring (one row per level, inline rule editing). Tab state is local
+  // since it doesn't survive page reloads — fine for now.
+  const [tab, setTab] = useState<'structure' | 'scoring'>('structure');
 
   if (isLoading) return <Spinner label="Loading template..." />;
   if (error) {
@@ -299,7 +328,28 @@ export function TemplateEditorPage() {
         </div>
       </div>
 
-      <LevelTree templateId={template.dnx_assessment_templateid} />
+      <div className={styles.tabs}>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'structure' ? styles.tabActive : ''}`}
+          onClick={() => setTab('structure')}
+        >
+          Structure
+        </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'scoring' ? styles.tabActive : ''}`}
+          onClick={() => setTab('scoring')}
+        >
+          Scoring & evaluation
+        </button>
+      </div>
+
+      {tab === 'structure' ? (
+        <LevelTree templateId={template.dnx_assessment_templateid} />
+      ) : (
+        <ScoringMatrix templateId={template.dnx_assessment_templateid} />
+      )}
     </div>
   );
 }

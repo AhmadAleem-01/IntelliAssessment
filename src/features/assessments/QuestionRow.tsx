@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { makeStyles } from '@fluentui/react-components';
+import { makeStyles, Tooltip } from '@fluentui/react-components';
 import {
   Flag16Regular,
   CheckmarkCircle16Regular,
@@ -237,16 +237,28 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
           <span className={styles.letterDot} title="Included in outcome letter" />
         )}
         {outcome.kind === 'pass' && (
-          <span className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}>
-            <CheckmarkCircle16Filled />
-            {outcome.label}
-          </span>
+          <Tooltip
+            content={outcome.explanation ?? outcome.label}
+            relationship="description"
+            withArrow
+          >
+            <span className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}>
+              <CheckmarkCircle16Filled />
+              {outcome.label}
+            </span>
+          </Tooltip>
         )}
         {outcome.kind === 'fail' && (
-          <span className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}>
-            <DismissCircle16Filled />
-            {outcome.label}
-          </span>
+          <Tooltip
+            content={outcome.explanation ?? outcome.label}
+            relationship="description"
+            withArrow
+          >
+            <span className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}>
+              <DismissCircle16Filled />
+              {outcome.label}
+            </span>
+          </Tooltip>
         )}
       </div>
       {level.dnx_hint_text && <div className={styles.hint}>{level.dnx_hint_text}</div>}

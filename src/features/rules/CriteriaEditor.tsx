@@ -13,7 +13,7 @@ import {
 } from '@fluentui/react-components';
 import { Delete16Regular, CheckmarkCircle16Filled } from '@fluentui/react-icons';
 import { parseOptions } from '../templates/levels/options';
-import type { DataType } from '../templates/levels/levelTypes';
+import type { DataType, LevelType } from '../templates/levels/levelTypes';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import {
   useCriteriaForLevel,
@@ -22,15 +22,10 @@ import {
 } from './api';
 import {
   OPERATOR_LABEL,
-  OUTCOME_PASS_LABEL,
-  OUTCOME_FAIL_LABEL,
-  OUTCOME_PASS,
-  OUTCOME_FAIL,
   operatorsForDataType,
   operatorNeedsTarget,
   type OperatorKey,
-  type OutcomePassKey,
-  type OutcomeFailKey,
+  type ScoringTypeKey,
 } from './types';
 
 const useStyles = makeStyles({
@@ -68,6 +63,11 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '12px',
+    '> *': { minWidth: 0 },
+  },
+  fluid: {
+    width: '100%',
+    minWidth: 0,
   },
   toolbar: {
     display: 'flex',
@@ -90,29 +90,47 @@ interface Props {
 
 interface DraftState {
   enabled: boolean;
+  // Question-only — ignored at runtime for non-question levels.
   operator: OperatorKey;
   targetValue: string;
-  outcomeIfPass: OutcomePassKey;
-  outcomeIfFail: OutcomeFailKey;
+  /**
+   * Question-only — how heavily this question counts in its parent's
+   * "At least X% must pass" math. Default 1 (normal). 2 = double-weighted.
+   * Ignored when the parent uses "Every child must pass".
+   */
+  importance: number;
+  // Parent-only fields (Subsection / Section).
+  scoringType: ScoringTypeKey;
+  /** Percent (0–100) — Weighted mode pass threshold. */
+  passThresholdPct: number;
 }
 
-function defaultDraft(dataType: DataType): DraftState {
+// Outcomes are no longer user-selectable — every rule passes as "Suitable"
+// and fails as "Not suitable". The picklist keys still need values to persist
+// to Dataverse; we always send Suitable/NotSuitable.
+function defaultDraft(_levelType: LevelType, dataType: DataType): DraftState {
   const ops = operatorsForDataType(dataType);
   return {
     enabled: false,
     operator: ops[0] ?? 'Equals',
     targetValue: '',
-    outcomeIfPass: 'Met',
-    outcomeIfFail: 'NotMet',
+    importance: 1,
+    scoringType: 'Boolean',
+    passThresholdPct: 50,
   };
 }
 
 export function CriteriaEditor({ level }: Props) {
   const styles = useStyles();
   const levelId = level.dnx_assessment_levelid;
+  const levelType = (level.dnx_assessment_level_type ?? 1) as LevelType;
+  const isQuestion = levelType === 3;
   const dataType = (level.dnx_data_type ?? 3) as DataType;
-  const operators = operatorsForDataType(dataType);
-  const options = dataType === 1 || dataType === 2 ? parseOptions(level.dnx_option_set_reference) : [];
+  const operators = isQuestion ? operatorsForDataType(dataType) : [];
+  const options =
+    isQuestion && (dataType === 1 || dataType === 2)
+      ? parseOptions(level.dnx_option_set_reference)
+      : [];
 
   const { data: criteria, isLoading } = useCriteriaForLevel(levelId);
   const upsert = useUpsertCriteria(levelId);
@@ -120,23 +138,24 @@ export function CriteriaEditor({ level }: Props) {
 
   const existing = criteria?.[0];
 
-  const [draft, setDraft] = useState<DraftState>(() => defaultDraft(dataType));
+  const [draft, setDraft] = useState<DraftState>(() => defaultDraft(levelType, dataType));
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
 
-  // Hydrate the local draft from the server when the row loads or the level
-  // changes. We only overwrite when the row id differs to avoid clobbering
-  // user edits mid-typing on the same record.
+  // Hydrate from server when the row loads. We only overwrite when the row id
+  // differs to avoid clobbering user edits mid-typing on the same record.
   useEffect(() => {
     if (existing) {
       setDraft({
         enabled: true,
         operator: existing.operator,
         targetValue: existing.targetValue,
-        outcomeIfPass: existing.outcomeIfPass,
-        outcomeIfFail: existing.outcomeIfFail,
+        importance: existing.weight > 0 ? existing.weight : 1,
+        scoringType: existing.scoringType,
+        // Stored 0–1 internally; surfaced as 0–100% in the editor.
+        passThresholdPct: Math.round((existing.passThreshold ?? 0.5) * 100),
       });
     } else if (!isLoading) {
-      setDraft(defaultDraft(dataType));
+      setDraft(defaultDraft(levelType, dataType));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, isLoading, levelId]);
@@ -153,26 +172,37 @@ export function CriteriaEditor({ level }: Props) {
   }
 
   async function handleSave() {
-    const needsTarget = operatorNeedsTarget(draft.operator);
+    const needsTarget = isQuestion && operatorNeedsTarget(draft.operator);
+    // sourceType maps level type → which roll-up tier the criteria belongs to.
+    // 0 = Question Value, 1 = Subsection Outcome, 2 = Section Outcome.
+    const sourceType: 0 | 1 | 2 = isQuestion ? 0 : levelType === 2 ? 1 : 2;
     const id = await upsert.mutateAsync({
       id: existing?.id,
       levelId,
       name: `${level.dnx_name} rule`,
       operator: draft.operator,
       targetValue: needsTarget ? draft.targetValue : '',
-      outcomeIfPass: draft.outcomeIfPass,
-      outcomeIfFail: draft.outcomeIfFail,
+      // Outcomes collapsed to a single Suitable / Not suitable pair.
+      outcomeIfPass: 'Suitable',
+      outcomeIfFail: 'NotSuitable',
+      // Questions always use the "Every child" path (no roll-up to do).
+      scoringType: isQuestion ? 'Boolean' : draft.scoringType,
+      passThreshold:
+        !isQuestion && draft.scoringType === 'Weighted' ? draft.passThresholdPct / 100 : 1,
+      // Question rules carry per-question importance; parent rules always
+      // save 1 (parents themselves don't "weight" — their children do).
+      weight: isQuestion ? draft.importance : 1,
+      sourceType,
     });
     setJustSavedId(id);
     setTimeout(() => setJustSavedId((curr) => (curr === id ? null : curr)), 1800);
   }
 
-  // What kind of input the target value field needs.
-  const needsTarget = operatorNeedsTarget(draft.operator);
-  const isChoiceType = dataType === 1 || dataType === 2;
-  const isDate = dataType === 4;
+  const needsTarget = isQuestion && operatorNeedsTarget(draft.operator);
+  const isChoiceType = isQuestion && (dataType === 1 || dataType === 2);
+  const isDate = isQuestion && dataType === 4;
 
-  if (operators.length === 0) {
+  if (isQuestion && operators.length === 0) {
     return (
       <div className={styles.hint}>
         This question's data type doesn't support evaluation rules yet.
@@ -180,15 +210,22 @@ export function CriteriaEditor({ level }: Props) {
     );
   }
 
+  // Friendly description above the rule. Differs per level type so the editor
+  // makes sense without re-reading the docs.
+  const description = isQuestion
+    ? "Marks this question as passing or failing based on the assessor's answer. Used for live preview and the cascade up to section / assessment outcomes."
+    : levelType === 2
+      ? 'Combines the pass/fail outcomes of the questions in this subsection into a single subsection outcome.'
+      : 'Combines the pass/fail outcomes of every subsection and question in this section into a single section outcome.';
+
   return (
     <div className={styles.root}>
       <div className={styles.headerRow}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 500 }}>Pass / fail rule</div>
-          <div className={styles.hint}>
-            Marks this question as passing or failing based on the assessor's answer.
-            Used for live preview and the future cascade up to section / assessment outcomes.
+          <div style={{ fontSize: 13, fontWeight: 500 }}>
+            {isQuestion ? 'Pass / fail rule' : 'Roll-up rule'}
           </div>
+          <div className={styles.hint}>{description}</div>
         </div>
         <div className={styles.switchSide}>
           {isLoading ? (
@@ -205,86 +242,134 @@ export function CriteriaEditor({ level }: Props) {
 
       {draft.enabled && (
         <div className={styles.card}>
-          <Field label="When the answer">
-            <Dropdown
-              value={OPERATOR_LABEL[draft.operator]}
-              selectedOptions={[draft.operator]}
-              onOptionSelect={(_, d) => {
-                if (d.optionValue) patch({ operator: d.optionValue as OperatorKey, targetValue: '' });
-              }}
-            >
-              {operators.map((op) => (
-                <Option key={op} value={op}>
-                  {OPERATOR_LABEL[op]}
-                </Option>
-              ))}
-            </Dropdown>
-          </Field>
-
-          {needsTarget && (
-            <Field label="this value">
-              {isChoiceType ? (
+          {isQuestion && (
+            <>
+              <Field label="When the answer">
                 <Dropdown
-                  value={draft.targetValue}
-                  selectedOptions={draft.targetValue ? [draft.targetValue] : []}
-                  onOptionSelect={(_, d) => patch({ targetValue: d.optionValue ?? '' })}
-                  placeholder="Pick an option"
+                  className={styles.fluid}
+                  value={OPERATOR_LABEL[draft.operator]}
+                  selectedOptions={[draft.operator]}
+                  onOptionSelect={(_, d) => {
+                    if (d.optionValue) {
+                      patch({
+                        operator: d.optionValue as OperatorKey,
+                        targetValue: '',
+                      });
+                    }
+                  }}
                 >
-                  {options.map((opt) => (
-                    <Option key={opt} value={opt}>
-                      {opt}
+                  {operators.map((op) => (
+                    <Option key={op} value={op}>
+                      {OPERATOR_LABEL[op]}
                     </Option>
                   ))}
                 </Dropdown>
-              ) : isDate ? (
-                <Input
-                  type="date"
-                  value={draft.targetValue}
-                  onChange={(_, d) => patch({ targetValue: d.value })}
-                />
-              ) : (
-                <Input
-                  value={draft.targetValue}
-                  onChange={(_, d) => patch({ targetValue: d.value })}
-                  placeholder="Expected value"
-                />
+              </Field>
+
+              {needsTarget && (
+                <Field label="this value">
+                  {isChoiceType ? (
+                    <Dropdown
+                      className={styles.fluid}
+                      value={draft.targetValue}
+                      selectedOptions={draft.targetValue ? [draft.targetValue] : []}
+                      onOptionSelect={(_, d) => patch({ targetValue: d.optionValue ?? '' })}
+                      placeholder="Pick an option"
+                    >
+                      {options.map((opt) => (
+                        <Option key={opt} value={opt}>
+                          {opt}
+                        </Option>
+                      ))}
+                    </Dropdown>
+                  ) : isDate ? (
+                    <Input
+                      type="date"
+                      value={draft.targetValue}
+                      onChange={(_, d) => patch({ targetValue: d.value })}
+                    />
+                  ) : (
+                    <Input
+                      value={draft.targetValue}
+                      onChange={(_, d) => patch({ targetValue: d.value })}
+                      placeholder="Expected value"
+                    />
+                  )}
+                </Field>
               )}
-            </Field>
+
+              <Field
+                label="Importance"
+                hint="How heavily this question counts in its parent's % threshold. 1 = normal (default). 2 = counts as two questions. Has no effect when the parent uses 'Every child must pass'."
+              >
+                <Input
+                  type="number"
+                  value={String(draft.importance)}
+                  onChange={(_, d) => {
+                    const n = parseFloat(d.value);
+                    patch({ importance: Number.isFinite(n) && n > 0 ? n : 1 });
+                  }}
+                  min={1}
+                  step={1}
+                />
+              </Field>
+            </>
           )}
 
-          <div className={styles.twoCol}>
-            <Field label="Outcome if pass">
-              <Dropdown
-                value={OUTCOME_PASS_LABEL[draft.outcomeIfPass]}
-                selectedOptions={[draft.outcomeIfPass]}
-                onOptionSelect={(_, d) => {
-                  if (d.optionValue) patch({ outcomeIfPass: d.optionValue as OutcomePassKey });
-                }}
+          {!isQuestion && (
+            <>
+              <Field
+                label="How does this level pass?"
+                hint={
+                  draft.scoringType === 'Boolean'
+                    ? 'Every child must pass for this level to pass.'
+                    : 'Pass when at least this percent of children pass.'
+                }
               >
-                {(Object.keys(OUTCOME_PASS) as OutcomePassKey[]).map((k) => (
-                  <Option key={k} value={k}>
-                    {OUTCOME_PASS_LABEL[k]}
-                  </Option>
-                ))}
-              </Dropdown>
-            </Field>
+                <Dropdown
+                  className={styles.fluid}
+                  value={
+                    draft.scoringType === 'Boolean'
+                      ? 'Every child must pass'
+                      : 'At least X% must pass'
+                  }
+                  selectedOptions={[draft.scoringType]}
+                  onOptionSelect={(_, d) => {
+                    if (d.optionValue) {
+                      patch({ scoringType: d.optionValue as ScoringTypeKey });
+                    }
+                  }}
+                >
+                  <Option value="Boolean">Every child must pass</Option>
+                  <Option value="Weighted">At least X% must pass</Option>
+                </Dropdown>
+              </Field>
 
-            <Field label="Outcome if fail">
-              <Dropdown
-                value={OUTCOME_FAIL_LABEL[draft.outcomeIfFail]}
-                selectedOptions={[draft.outcomeIfFail]}
-                onOptionSelect={(_, d) => {
-                  if (d.optionValue) patch({ outcomeIfFail: d.optionValue as OutcomeFailKey });
-                }}
-              >
-                {(Object.keys(OUTCOME_FAIL) as OutcomeFailKey[]).map((k) => (
-                  <Option key={k} value={k}>
-                    {OUTCOME_FAIL_LABEL[k]}
-                  </Option>
-                ))}
-              </Dropdown>
-            </Field>
-          </div>
+              {draft.scoringType === 'Weighted' && (
+                <Field
+                  label="Minimum % of children that must pass"
+                  hint="e.g. 50 means at least half must pass."
+                >
+                  <Input
+                    type="number"
+                    value={String(draft.passThresholdPct)}
+                    onChange={(_, d) => {
+                      const n = parseInt(d.value, 10);
+                      patch({
+                        passThresholdPct: Number.isFinite(n)
+                          ? Math.max(0, Math.min(100, n))
+                          : 0,
+                      });
+                    }}
+                    min={0}
+                    max={100}
+                    step={5}
+                    contentAfter="%"
+                  />
+                </Field>
+              )}
+            </>
+          )}
 
           {(upsert.error || remove.error) && (
             <MessageBar intent="error">
