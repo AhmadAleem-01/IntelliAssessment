@@ -16,8 +16,20 @@ import {
   Warning20Filled,
 } from '@fluentui/react-icons';
 import { useTemplateLevels } from '../templates/levels/api';
-import { useAssessmentResponses, useSubmitForReview } from './api';
-import { validateSubmission, type MissingRequired } from './responseHelpers';
+import {
+  useAssessmentResponses,
+  useSubmitForReview,
+  ASSESSMENT_OUTCOME,
+  type AssessmentOutcomeValue,
+} from './api';
+import {
+  validateSubmission,
+  indexResponses,
+  type MissingRequired,
+} from './responseHelpers';
+import { buildTree } from '../templates/levels/treeBuilder';
+import { useCriteriaForLevels } from '../rules/api';
+import { evaluateAssessment, findRootCriteria } from '../rules/engine';
 
 const useStyles = makeStyles({
   surface: {
@@ -104,6 +116,56 @@ const useStyles = makeStyles({
       border: '0.5px solid var(--color-purple-text) !important',
     },
   },
+  outcomePreview: {
+    marginTop: '14px',
+    padding: '10px 12px',
+    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-background-tertiary)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  outcomePreviewLabel: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: 'var(--color-text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+  },
+  outcomePreviewRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  outcomeChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 10px',
+    borderRadius: '999px',
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+  outcomeChipPass: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+    border: '0.5px solid var(--color-green)',
+  },
+  outcomeChipFail: {
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
+    border: '0.5px solid var(--color-red)',
+  },
+  outcomeChipPending: {
+    backgroundColor: 'var(--color-background-primary)',
+    color: 'var(--color-text-secondary)',
+    border: '0.5px solid var(--color-border-secondary)',
+  },
+  outcomeHint: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    lineHeight: 1.4,
+  },
 });
 
 interface Props {
@@ -125,15 +187,36 @@ export function SubmitAssessmentDialog({
   const { data: levels } = useTemplateLevels(templateId);
   const { data: responses } = useAssessmentResponses(instanceId);
   const submit = useSubmitForReview(instanceId);
+  // Pull criteria for every level so we can preview + persist the outcome.
+  const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
+  const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
 
   // Validate only while the dialog is open — avoids running on every render
   // of the assessment page when the user is just answering questions.
   const missing: MissingRequired[] = open ? validateSubmission(levels, responses) : [];
   const blocked = missing.length > 0;
 
+  // Compute the overall outcome live so the user sees what will be persisted
+  // and the mutation has a value to write. Pending if the rules don't yield
+  // a definitive verdict (no rules authored, or no answered questions yet).
+  const outcome = open
+    ? evaluateAssessment(
+        buildTree(levels),
+        criteriaByLevelId,
+        indexResponses(responses),
+        findRootCriteria(levels, criteriaByLevelId),
+      )
+    : { kind: 'not-evaluable' as const, reason: 'no-children' as const };
+  const outcomeValue: AssessmentOutcomeValue =
+    outcome.kind === 'pass'
+      ? ASSESSMENT_OUTCOME.Suitable
+      : outcome.kind === 'fail'
+        ? ASSESSMENT_OUTCOME.NotSuitable
+        : ASSESSMENT_OUTCOME.Pending;
+
   async function handleSubmit() {
     if (blocked) return;
-    await submit.mutateAsync();
+    await submit.mutateAsync({ outcome: outcomeValue });
     setOpen(false);
   }
 
@@ -196,6 +279,40 @@ export function SubmitAssessmentDialog({
                   <b>Pending review</b> and stamps today's date as the submission
                   date. The instance can still be edited until a reviewer signs
                   off, but the status will surface to reviewers immediately.
+                  <div className={styles.outcomePreview}>
+                    <span className={styles.outcomePreviewLabel}>
+                      Outcome to record
+                    </span>
+                    <div className={styles.outcomePreviewRow}>
+                      {outcome.kind === 'pass' && (
+                        <span
+                          className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}
+                        >
+                          Suitable
+                        </span>
+                      )}
+                      {outcome.kind === 'fail' && (
+                        <span
+                          className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}
+                        >
+                          Not suitable
+                        </span>
+                      )}
+                      {outcome.kind === 'not-evaluable' && (
+                        <span
+                          className={`${styles.outcomeChip} ${styles.outcomeChipPending}`}
+                        >
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                    <span className={styles.outcomeHint}>
+                      {outcome.kind === 'not-evaluable'
+                        ? "No rules yielded a definitive verdict — the reviewer will decide on approval."
+                        : (outcome.explanation ??
+                          "Based on the current answers and configured rules. The reviewer can still override on approval.")}
+                    </span>
+                  </div>
                 </>
               )}
             </div>

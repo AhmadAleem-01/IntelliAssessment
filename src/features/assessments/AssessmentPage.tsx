@@ -19,13 +19,20 @@ import {
   DismissCircle16Regular,
   PersonStar16Regular,
 } from '@fluentui/react-icons';
-import { useAssessmentInstance, useUpsertResponse } from './api';
+import { useAssessmentInstance, useUpsertResponse, useAssessmentResponses } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
 import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
 import { RejectAssessmentDialog } from './RejectAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
+import { Tooltip } from '@fluentui/react-components';
+import { useTemplateLevels } from '../templates/levels/api';
+import { buildTree } from '../templates/levels/treeBuilder';
+import { useCriteriaForLevels } from '../rules/api';
+import { evaluateAssessment, findRootCriteria } from '../rules/engine';
+import { indexResponses } from './responseHelpers';
+import type { EvaluationOutcome } from '../rules/types';
 
 const useStyles = makeStyles({
   backLink: {
@@ -91,6 +98,25 @@ const useStyles = makeStyles({
     borderRadius: 'var(--border-radius-pill)',
     fontSize: '11px',
     fontWeight: 500,
+  },
+  outcomeChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '3px 10px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 600,
+  },
+  outcomeChipPass: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+    border: '0.5px solid var(--color-green)',
+  },
+  outcomeChipFail: {
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
+    border: '0.5px solid var(--color-red)',
   },
   card: {
     backgroundColor: 'var(--color-background-primary)',
@@ -311,6 +337,24 @@ export function AssessmentPage() {
     }
   }, [upsert.isSuccess, upsert.data]);
 
+  // Live outcome preview for the hero chip. Pulled from the same data the
+  // checklist already loads downstream — React Query dedupes the queries.
+  const templateIdForOutcome = assessment
+    ? lookupId(assessment, 'dnx_assessmenttemplate')
+    : undefined;
+  const { data: levels } = useTemplateLevels(templateIdForOutcome);
+  const { data: responses } = useAssessmentResponses(assessmentId);
+  const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
+  const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
+  const liveOutcome: EvaluationOutcome = levels
+    ? evaluateAssessment(
+        buildTree(levels),
+        criteriaByLevelId,
+        indexResponses(responses),
+        findRootCriteria(levels, criteriaByLevelId),
+      )
+    : { kind: 'not-evaluable', reason: 'no-children' };
+
   if (isLoading) return <Spinner label="Loading assessment..." />;
   if (error) {
     return (
@@ -359,6 +403,14 @@ export function AssessmentPage() {
                 <span>v{assessment.dnx_version}</span>
               )}
               <SaveBadge upsert={upsert} lastSavedAt={lastSavedAt} />
+              <HeroOutcomeChip
+                styles={styles}
+                persisted={
+                  assessment.dnx_outcome as 0 | 1 | 2 | undefined | null
+                }
+                live={liveOutcome}
+                statusLabel={label}
+              />
             </div>
           </div>
         </div>
@@ -613,4 +665,89 @@ function SaveBadge({ upsert, lastSavedAt }: SaveBadgeProps) {
     );
   }
   return <span className={`${styles.saveBadge} ${styles.saveBadgeIdle}`}>Autosave on</span>;
+}
+
+/**
+ * Hero outcome chip — what verdict this assessment carries right now.
+ *
+ * Source of truth depends on status:
+ *   - **Draft / InProgress** → live preview computed from current answers
+ *     (matches the chip inside the checklist banner; gives feedback while
+ *     editing).
+ *   - **PendingReview / Complete** → persisted `dnx_outcome` written by
+ *     submit or reviewer approval. Live preview is hidden here so the
+ *     hero doesn't disagree with what was actually saved.
+ *
+ * Renders nothing when there's no signal yet (no rules, no answers, no
+ * persisted value) to avoid a perpetually empty / Pending pill cluttering
+ * the meta row.
+ */
+interface HeroOutcomeChipProps {
+  styles: ReturnType<typeof useStyles>;
+  persisted: 0 | 1 | 2 | undefined | null;
+  live: EvaluationOutcome;
+  statusLabel: string;
+}
+function HeroOutcomeChip({ styles, persisted, live, statusLabel }: HeroOutcomeChipProps) {
+  const isLocked = statusLabel === 'PendingReview' || statusLabel === 'Complete';
+  // Locked status: trust the persisted value. Pending (2) means submitted
+  // without a definitive verdict — render a muted "Pending" so reviewers
+  // know an actual decision is still required.
+  if (isLocked) {
+    if (persisted === 0) {
+      return (
+        <Tooltip
+          content="Outcome recorded at submission / approval."
+          relationship="description"
+          withArrow
+        >
+          <span className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}>
+            Suitable
+          </span>
+        </Tooltip>
+      );
+    }
+    if (persisted === 1) {
+      return (
+        <Tooltip
+          content="Outcome recorded at submission / approval."
+          relationship="description"
+          withArrow
+        >
+          <span className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}>
+            Not suitable
+          </span>
+        </Tooltip>
+      );
+    }
+    return null;
+  }
+  // Draft / InProgress: live preview only.
+  if (live.kind === 'pass') {
+    return (
+      <Tooltip
+        content={live.explanation ?? 'Live preview based on current answers.'}
+        relationship="description"
+        withArrow
+      >
+        <span className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}>
+          Suitable (preview)
+        </span>
+      </Tooltip>
+    );
+  }
+  if (live.kind === 'fail') {
+    return (
+      <Tooltip
+        content={live.explanation ?? 'Live preview based on current answers.'}
+        relationship="description"
+        withArrow
+      >
+        <span className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}>
+          Not suitable (preview)
+        </span>
+      </Tooltip>
+    );
+  }
+  return null;
 }

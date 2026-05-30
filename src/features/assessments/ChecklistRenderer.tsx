@@ -31,7 +31,7 @@ import { lookupId } from '../../lib/dataverse';
 import { QuestionRow } from './QuestionRow';
 import { useCriteriaForLevels } from '../rules/api';
 import type { Criteria, EvaluationOutcome } from '../rules/types';
-import { evaluateNode, evaluateAssessment } from '../rules/engine';
+import { evaluateNode, evaluateAssessment, findRootCriteria } from '../rules/engine';
 
 const useStyles = makeStyles({
   root: {
@@ -406,11 +406,16 @@ export function ChecklistRenderer({
     (levels ?? []).map((l) => [l.dnx_assessment_levelid, l] as const),
   );
   // Overall outcome rolls up every top-level section. Live preview only —
-  // persistence happens through the reviewer Approve flow.
+  // persistence happens through Submit and the reviewer Approve flow. If the
+  // template carries an authored assessment-level rule (on its hidden Root),
+  // that rule drives the aggregation; otherwise we fall back to "every
+  // section must pass".
+  const rootCriteria = findRootCriteria(levels, criteriaByLevelId);
   const overallOutcome = evaluateAssessment(
     tree,
     criteriaByLevelId,
     responsesByLevelId,
+    rootCriteria,
   );
 
   return (

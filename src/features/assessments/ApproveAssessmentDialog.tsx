@@ -15,8 +15,11 @@ import {
   MessageBarBody,
   makeStyles,
 } from '@fluentui/react-components';
-import { CheckmarkCircle20Filled } from '@fluentui/react-icons';
-import { useApproveAssessment } from './api';
+import {
+  CheckmarkCircle20Filled,
+  Warning16Filled,
+} from '@fluentui/react-icons';
+import { useApproveAssessment, useReviewerComments } from './api';
 
 const useStyles = makeStyles({
   surface: {
@@ -61,6 +64,31 @@ const useStyles = makeStyles({
       border: '0.5px solid var(--color-green-text) !important',
     },
   },
+  flagWarning: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '10px 12px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-amber-soft)',
+    border: '0.5px solid var(--color-amber)',
+    color: 'var(--color-amber-text)',
+    marginBottom: '14px',
+  },
+  flagWarningIcon: { flexShrink: 0, marginTop: '2px' },
+  flagWarningBody: {
+    fontSize: '12px',
+    lineHeight: 1.45,
+    color: 'var(--color-text-primary)',
+  },
+  flagWarningTitle: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'var(--color-amber-text)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '2px',
+  },
 });
 
 interface Props {
@@ -71,9 +99,17 @@ interface Props {
 export function ApproveAssessmentDialog({ instanceId, trigger }: Props) {
   const styles = useStyles();
   const approve = useApproveAssessment(instanceId);
+  const { data: comments } = useReviewerComments(instanceId);
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<'0' | '1'>('0');
   const [notes, setNotes] = useState('');
+
+  // Block approval while any reviewer flags are still unresolved. The
+  // assessor is expected to fix the flagged questions and the reviewer
+  // (or someone) resolves the flag before sign-off — approving over the
+  // top of open flags would defeat the audit trail.
+  const unresolvedFlags = (comments ?? []).filter((c) => !c.dnx_is_resolved);
+  const blocked = unresolvedFlags.length > 0;
 
   function reset() {
     setOutcome('0');
@@ -82,6 +118,7 @@ export function ApproveAssessmentDialog({ instanceId, trigger }: Props) {
   }
 
   async function handleApprove() {
+    if (blocked) return;
     await approve.mutateAsync({
       outcome: outcome === '0' ? 0 : 1,
       notes: notes.trim() || undefined,
@@ -119,6 +156,21 @@ export function ApproveAssessmentDialog({ instanceId, trigger }: Props) {
               </MessageBar>
             )}
 
+            {blocked && (
+              <div className={styles.flagWarning}>
+                <Warning16Filled className={styles.flagWarningIcon} />
+                <div className={styles.flagWarningBody}>
+                  <div className={styles.flagWarningTitle}>
+                    Unresolved reviewer flags
+                  </div>
+                  {unresolvedFlags.length} question
+                  {unresolvedFlags.length === 1 ? '' : 's'} still flagged. Resolve
+                  every flag on the checklist before approving — open flags should
+                  either be addressed by the assessor or marked resolved.
+                </div>
+              </div>
+            )}
+
             <div className={styles.fields}>
               <Field label="Outcome" required>
                 <RadioGroup
@@ -153,7 +205,7 @@ export function ApproveAssessmentDialog({ instanceId, trigger }: Props) {
               className={styles.approveBtn}
               type="button"
               onClick={handleApprove}
-              disabled={approve.isPending}
+              disabled={approve.isPending || blocked}
             >
               {approve.isPending ? 'Approving...' : 'Approve'}
             </Button>

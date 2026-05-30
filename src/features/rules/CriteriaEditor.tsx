@@ -13,7 +13,7 @@ import {
 } from '@fluentui/react-components';
 import { Delete16Regular, CheckmarkCircle16Filled } from '@fluentui/react-icons';
 import { parseOptions } from '../templates/levels/options';
-import type { DataType, LevelType } from '../templates/levels/levelTypes';
+import type { DataType } from '../templates/levels/levelTypes';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import {
   useCriteriaForLevel,
@@ -108,7 +108,7 @@ interface DraftState {
 // Outcomes are no longer user-selectable — every rule passes as "Suitable"
 // and fails as "Not suitable". The picklist keys still need values to persist
 // to Dataverse; we always send Suitable/NotSuitable.
-function defaultDraft(_levelType: LevelType, dataType: DataType): DraftState {
+function defaultDraft(_levelType: number, dataType: DataType): DraftState {
   const ops = operatorsForDataType(dataType);
   return {
     enabled: false,
@@ -123,7 +123,10 @@ function defaultDraft(_levelType: LevelType, dataType: DataType): DraftState {
 export function CriteriaEditor({ level }: Props) {
   const styles = useStyles();
   const levelId = level.dnx_assessment_levelid;
-  const levelType = (level.dnx_assessment_level_type ?? 1) as LevelType;
+  // Note: numeric type so the Root level (0) — used as the carrier for the
+  // assessment-outcome rule — can be compared too. The public `LevelType`
+  // union is 1|2|3; widening to number here keeps the engine + editor in sync.
+  const levelType = (level.dnx_assessment_level_type ?? 1) as number;
   const isQuestion = levelType === 3;
   const dataType = (level.dnx_data_type ?? 3) as DataType;
   const operators = isQuestion ? operatorsForDataType(dataType) : [];
@@ -179,7 +182,9 @@ export function CriteriaEditor({ level }: Props) {
     const id = await upsert.mutateAsync({
       id: existing?.id,
       levelId,
-      name: `${level.dnx_name} rule`,
+      // Root level has a placeholder name (`_root_`); use a friendlier title
+      // so the criteria row reads sensibly in the maker portal.
+      name: levelType === 0 ? 'Assessment outcome rule' : `${level.dnx_name} rule`,
       operator: draft.operator,
       targetValue: needsTarget ? draft.targetValue : '',
       // Outcomes collapsed to a single Suitable / Not suitable pair.
@@ -216,7 +221,9 @@ export function CriteriaEditor({ level }: Props) {
     ? "Marks this question as passing or failing based on the assessor's answer. Used for live preview and the cascade up to section / assessment outcomes."
     : levelType === 2
       ? 'Combines the pass/fail outcomes of the questions in this subsection into a single subsection outcome.'
-      : 'Combines the pass/fail outcomes of every subsection and question in this section into a single section outcome.';
+      : levelType === 1
+        ? 'Combines the pass/fail outcomes of every subsection and question in this section into a single section outcome.'
+        : 'Combines the outcomes of every section into the overall assessment verdict (Suitable / Not suitable).';
 
   return (
     <div className={styles.root}>

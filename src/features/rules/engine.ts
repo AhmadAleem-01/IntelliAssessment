@@ -113,6 +113,21 @@ function compare(
   }
 }
 
+/**
+ * Pluck the Root-level (`dnx_assessment_level_type === 0`) criteria for a
+ * template, if any. Returned by `useEnsureRootLevel` callers; the runtime
+ * evaluators take it as an optional arg to `evaluateAssessment`.
+ */
+export function findRootCriteria(
+  levels: Dnx_assessment_levels[] | undefined,
+  criteriaByLevelId: Map<string, Criteria> | undefined,
+): Criteria | undefined {
+  if (!levels || !criteriaByLevelId) return undefined;
+  const root = levels.find((l) => l.dnx_assessment_level_type === 0);
+  if (!root) return undefined;
+  return criteriaByLevelId.get(root.dnx_assessment_levelid);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Cascade evaluator — Subsection / Section / Assessment roll-ups.
 // All functions are pure and dependency-free so the future server-side flow
@@ -272,6 +287,14 @@ export function evaluateAssessment(
   sectionNodes: LevelNode[],
   criteriaByLevelId: Map<string, Criteria> | undefined,
   responsesByLevelId: Map<string, Dnx_assessment_responses>,
+  /**
+   * Optional rule authored on the template Root level. When present, sections
+   * are aggregated through this rule using the standard `aggregateChildOutcomes`
+   * (so authors get Every-child / X%-threshold + per-section Importance for
+   * free). When absent, falls back to the implicit "every section must pass"
+   * semantics — preserves behaviour for templates with no assessment-level rule.
+   */
+  rootCriteria?: Criteria,
 ): EvaluationOutcome {
   if (sectionNodes.length === 0) {
     return { kind: 'not-evaluable', reason: 'no-children' };
@@ -279,7 +302,15 @@ export function evaluateAssessment(
   const perSection = sectionNodes.map((n) => ({
     name: n.level.dnx_name,
     outcome: evaluateNode(n, criteriaByLevelId, responsesByLevelId),
+    weight: weightFor(criteriaByLevelId?.get(n.level.dnx_assessment_levelid)),
   }));
+
+  if (rootCriteria) {
+    // Authored rule path — same aggregator as sub/section roll-ups.
+    return aggregateChildOutcomes(rootCriteria, perSection);
+  }
+
+  // Fallback: every section must pass.
   const evaluable = perSection.filter(
     (s) => s.outcome.kind === 'pass' || s.outcome.kind === 'fail',
   );

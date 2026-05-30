@@ -417,18 +417,40 @@ async function snapshotAssessment(
  * Caller is responsible for required-field validation BEFORE invoking this
  * mutation — see `validateSubmission()` in responseHelpers.ts.
  */
+/**
+ * Outcome enum on dnx_assessment_instances: 0 = Suitable, 1 = NotSuitable,
+ * 2 = Pending. The picker on the reviewer Approve dialog uses the same
+ * picklist; submit and reopen both write through it too.
+ */
+export const ASSESSMENT_OUTCOME = {
+  Suitable: 0,
+  NotSuitable: 1,
+  Pending: 2,
+} as const;
+export type AssessmentOutcomeValue =
+  (typeof ASSESSMENT_OUTCOME)[keyof typeof ASSESSMENT_OUTCOME];
+
 export function useSubmitForReview(instanceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (): Promise<Dnx_assessment_instances> => {
+    /**
+     * Optional `outcome` lets the caller persist the assessor's pre-evaluation
+     * verdict alongside the status flip. Pass 0 for Suitable, 1 for
+     * NotSuitable, or omit (= Pending) when the rules don't yield a definitive
+     * result yet. The reviewer can still override on Approve.
+     */
+    mutationFn: async (
+      input?: { outcome?: AssessmentOutcomeValue },
+    ): Promise<Dnx_assessment_instances> => {
       const cached = qc.getQueryData<Dnx_assessment_instances>(
         assessmentKeys.detail(instanceId),
       );
       const nextVersion = (cached?.dnx_version ?? 0) + 1;
-      const changes = {
+      const changes: Record<string, unknown> = {
         statuscode: 778540003, // PendingReview
         dnx_submittedon: new Date().toISOString().slice(0, 10),
         dnx_version: nextVersion,
+        dnx_outcome: input?.outcome ?? ASSESSMENT_OUTCOME.Pending,
       };
       const r = await Dnx_assessment_instancesService.update(
         instanceId,
@@ -475,9 +497,13 @@ export function useReopenAssessment(instanceId: string) {
         assessmentKeys.detail(instanceId),
       );
       const nextVersion = (cached?.dnx_version ?? 0) + 1;
-      const changes = {
+      // Clear the persisted outcome back to Pending — the assessor is taking
+      // the work back, so any previously-submitted verdict is no longer
+      // authoritative until they re-submit.
+      const changes: Record<string, unknown> = {
         statuscode: 778540002, // InProgress
         dnx_version: nextVersion,
+        dnx_outcome: ASSESSMENT_OUTCOME.Pending,
       };
       const r = await Dnx_assessment_instancesService.update(
         instanceId,
@@ -534,7 +560,11 @@ export function useApproveAssessment(instanceId: string) {
       const changes = {
         statuscode: 778540004, // Complete
         dnx_outcome: input.outcome,
-        dnx_outcome_notes: input.notes?.trim() || undefined,
+        // Always overwrite — sending '' clears any stale rejection notes left
+        // over from a previous Reject → Reopen → Approve cycle. Using
+        // `undefined` here lets PATCH skip the field, so the old notes would
+        // survive and the green "Approved" banner would render reject text.
+        dnx_outcome_notes: input.notes?.trim() ?? '',
         dnx_version: nextVersion,
       };
       const r = await Dnx_assessment_instancesService.update(

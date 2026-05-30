@@ -1,14 +1,22 @@
-import { useMemo, useState } from 'react';
-import { Spinner, MessageBar, MessageBarBody, Button, makeStyles } from '@fluentui/react-components';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  Button,
+  makeStyles,
+} from '@fluentui/react-components';
 import {
   ChevronDown16Regular,
   ChevronRight16Regular,
   Add16Regular,
   Edit16Regular,
+  Trophy16Regular,
 } from '@fluentui/react-icons';
-import { useTemplateLevels } from '../templates/levels/api';
+import { useTemplateLevels, useEnsureRootLevel } from '../templates/levels/api';
 import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
 import type { LevelType } from '../templates/levels/levelTypes';
+import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import { useCriteriaForLevels } from './api';
 import { CriteriaEditor } from './CriteriaEditor';
 import { OPERATOR_LABEL, type Criteria } from './types';
@@ -129,6 +137,23 @@ const useStyles = makeStyles({
   rowPathSection: { color: 'var(--color-purple-text)' },
   rowPathSubsection: { color: 'var(--color-blue-text)' },
   rowPathQuestion: { color: 'var(--color-teal-text)' },
+  // Assessment-outcome row sits above the section rows with a subtle amber
+  // accent — it's a different kind of row (template-wide) so it shouldn't
+  // visually blend in with the section / subsection / question hierarchy.
+  rowHeaderAssessment: {
+    borderLeft: '3px solid var(--color-amber)',
+    backgroundColor: 'var(--color-amber-soft)',
+    ':hover': {
+      backgroundColor: 'var(--color-amber-soft)',
+      filter: 'brightness(0.97)',
+    },
+  },
+  ruleChipAssessment: {
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
+    border: '0.5px solid var(--color-amber)',
+  },
+  rowPathAssessment: { color: 'var(--color-amber-text)' },
   importanceBadge: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -250,6 +275,11 @@ export function ScoringMatrix({ templateId }: Props) {
         parent automatically.
       </div>
       <div className={styles.body}>
+        <AssessmentOutcomeRow
+          templateId={templateId}
+          levels={levels ?? []}
+          criteriaByLevelId={criteriaByLevelId}
+        />
         {rows.map(({ node, pathLabel, depth }) => {
           const levelId = node.level.dnx_assessment_levelid;
           const levelType = (node.level.dnx_assessment_level_type ?? 1) as LevelType;
@@ -327,6 +357,118 @@ export function ScoringMatrix({ templateId }: Props) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Synthetic top row representing the template's overall assessment outcome.
+ *
+ * The rule binds to a hidden Root-typed level (`dnx_assessment_level_type === 0`)
+ * that's auto-created the first time the row is expanded — the schema only
+ * allows criteria to hang off a level, so we make sure a level exists. Once
+ * the Root level is created, this row behaves like any other in the matrix:
+ * the inline CriteriaEditor authors the rule, the chip in the header shows
+ * its summary, and the runtime cascade picks it up via `findRootCriteria`.
+ */
+function AssessmentOutcomeRow({
+  templateId,
+  levels,
+  criteriaByLevelId,
+}: {
+  templateId: string;
+  levels: Dnx_assessment_levels[];
+  criteriaByLevelId: Map<string, Criteria> | undefined;
+}) {
+  const styles = useStyles();
+  const [expanded, setExpanded] = useState(false);
+  const ensureRoot = useEnsureRootLevel(templateId);
+
+  // If a Root exists already, use it; otherwise the editor stays gated until
+  // the user expands the row, which triggers the ensure-root mutation.
+  const existingRoot = useMemo(
+    () => levels.find((l) => l.dnx_assessment_level_type === 0),
+    [levels],
+  );
+  const [rootLevel, setRootLevel] = useState<Dnx_assessment_levels | undefined>(
+    existingRoot,
+  );
+  // Keep local state in sync when the levels query refreshes after creation.
+  useEffect(() => {
+    if (existingRoot) setRootLevel(existingRoot);
+  }, [existingRoot]);
+
+  const criteria = rootLevel
+    ? criteriaByLevelId?.get(rootLevel.dnx_assessment_levelid)
+    : undefined;
+  const summary = criteria
+    ? criteria.scoringType === 'Weighted'
+      ? `At least ${Math.round(criteria.passThreshold * 100)}% must pass`
+      : 'Every section must pass'
+    : '';
+
+  async function handleExpand() {
+    // Idempotent — returns existing root if it's already there.
+    if (!rootLevel) {
+      const created = await ensureRoot.mutateAsync();
+      setRootLevel(created);
+    }
+    setExpanded(true);
+  }
+
+  return (
+    <div className={styles.row}>
+      <div
+        className={`${styles.rowHeader} ${styles.rowHeaderAssessment} ${expanded ? styles.rowHeaderActive : ''}`}
+        onClick={() => (expanded ? setExpanded(false) : void handleExpand())}
+      >
+        <span className={styles.rowChevron}>
+          {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+        </span>
+        <span className={`${styles.rowPath} ${styles.rowPathAssessment}`}>
+          <Trophy16Regular style={{ marginRight: 4, verticalAlign: '-2px' }} />
+          Assessment
+        </span>
+        <span className={styles.rowName}>Overall outcome</span>
+        {criteria ? (
+          <span className={styles.rowSummary}>
+            <span className={`${styles.ruleChip} ${styles.ruleChipAssessment}`}>
+              {summary}
+            </span>
+            <Edit16Regular />
+          </span>
+        ) : (
+          <span className={styles.rowSummary}>
+            <span className={styles.noRuleHint}>
+              {ensureRoot.isPending ? 'Preparing…' : 'Defaults to every section must pass'}
+            </span>
+            <Button
+              appearance="subtle"
+              size="small"
+              icon={<Add16Regular />}
+              disabled={ensureRoot.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleExpand();
+              }}
+            >
+              Add rule
+            </Button>
+          </span>
+        )}
+      </div>
+      {expanded && rootLevel && (
+        <div className={styles.rowBody}>
+          <CriteriaEditor level={rootLevel} />
+        </div>
+      )}
+      {ensureRoot.error && (
+        <div style={{ padding: '8px 18px' }}>
+          <MessageBar intent="error">
+            <MessageBarBody>{(ensureRoot.error as Error).message}</MessageBarBody>
+          </MessageBar>
+        </div>
+      )}
     </div>
   );
 }

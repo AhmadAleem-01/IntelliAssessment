@@ -107,6 +107,54 @@ function levelToRecord(
   return record;
 }
 
+/**
+ * Find — or create on demand — the single hidden Root level (`dnx_assessment_level_type = 0`)
+ * for a template. The Root never appears in the structure tree (`buildTree` filters
+ * it out) but it's the carrier for the **assessment outcome** rule: criteria are
+ * always attached to a level, so we need a level the assessment-level rule can
+ * bind to. Returns the Root level row.
+ *
+ * Idempotent: if a Root already exists for this template, returns it without
+ * creating a new one. Safe to call from a UI affordance like "expand the
+ * Assessment outcome row" without worrying about duplicate rows.
+ */
+export function useEnsureRootLevel(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<Dnx_assessment_levels> => {
+      // First pass — does a Root already exist?
+      const existing = await Dnx_assessment_levelsService.getAll({
+        filter: `_dnx_assessment_template_value eq ${templateId} and dnx_assessment_level_type eq 0`,
+        top: 1,
+      });
+      if (existing.success && (existing.data?.length ?? 0) > 0) {
+        return existing.data![0];
+      }
+
+      const record: Record<string, unknown> = {
+        dnx_name: '_root_', // never shown in the tree; placeholder to satisfy required name
+        dnx_assessment_level_type: 0,
+        dnx_assessment_level_order: -1,
+        'dnx_Assessment_Template@odata.bind': bindLookup(
+          'dnx_assessment_templates',
+          templateId,
+        ),
+      };
+      const r = await Dnx_assessment_levelsService.create(
+        record as unknown as Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>,
+      );
+      if (!r.success || !r.data) {
+        console.error('[ensure root level] failed', r.error, 'payload:', record);
+        throw new Error(r.error?.message ?? 'Failed to ensure root level');
+      }
+      return r.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: levelKeys.byTemplate(templateId) });
+    },
+  });
+}
+
 export function useCreateLevel(templateId: string) {
   const qc = useQueryClient();
   return useMutation({
