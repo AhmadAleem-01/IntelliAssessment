@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getClient } from '@microsoft/power-apps/data';
 import {
   Dnx_assessment_instancesService,
   Dnx_assessment_responsesService,
+  Dnx_assessment_versionsService,
 } from '../../generated';
+import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import type {
   Dnx_assessment_instances,
   Dnx_assessment_instancesBase,
@@ -11,7 +14,9 @@ import type {
   Dnx_assessment_responses,
   Dnx_assessment_responsesBase,
 } from '../../generated/models/Dnx_assessment_responsesModel';
+import type { Dnx_assessment_versionsBase } from '../../generated/models/Dnx_assessment_versionsModel';
 import type { DataType } from '../templates/levels/levelTypes';
+import { lookupId } from '../../lib/dataverse';
 
 export const assessmentKeys = {
   all: ['assessments'] as const,
@@ -286,8 +291,107 @@ async function bumpInstanceVersion(
       });
     }
     qc.invalidateQueries({ queryKey: assessmentKeys.detail(instanceId) });
+    // Fire-and-forget audit snapshot for the new version.
+    void snapshotAssessment(qc, instanceId, next, 'Autosave');
   } catch (e) {
     console.warn('[bumpInstanceVersion] failed', e);
+  }
+}
+
+/**
+ * Snapshot the full assessment state into a new `dnx_assessment_versions` row.
+ *
+ * Two-call write pattern because `dnx_snapsho_tjson` is a Dataverse File-type
+ * column (note the typo `snapsho_tjson` — that IS the actual schema name):
+ *
+ *   1. `Dnx_assessment_versionsService.create()` makes the row with the
+ *      version number, change summary, and instance lookup.
+ *   2. The SDK's `client.uploadFileToRecord()` then uploads the JSON payload
+ *      to that row's `dnx_snapsho_tjson` column. Files in Dataverse can't be
+ *      written via the normal create/update body.
+ *
+ * Always fire-and-forget — errors are logged but never thrown, because the
+ * assessor's primary save has already succeeded. The audit trail being one
+ * row behind is acceptable; an outright save failure isn't.
+ *
+ * Reads cache for the instance + responses. The just-saved response may not
+ * be in cache yet (invalidation is async) so the snapshot will sometimes
+ * lag by one save. Acceptable for audit purposes — the final snapshot at
+ * submission time is the authoritative one.
+ */
+async function snapshotAssessment(
+  qc: ReturnType<typeof useQueryClient>,
+  instanceId: string,
+  versionNumber: number,
+  changeReason: 'Autosave' | 'Submitted' | 'Reopened',
+): Promise<void> {
+  try {
+    const instance = qc.getQueryData<Dnx_assessment_instances>(
+      assessmentKeys.detail(instanceId),
+    );
+    if (!instance) return;
+    const responses =
+      qc.getQueryData<Dnx_assessment_responses[]>(
+        assessmentKeys.responses(instanceId),
+      ) ?? [];
+
+    const snapshot = {
+      capturedAt: new Date().toISOString(),
+      reason: changeReason,
+      version: versionNumber,
+      instance: {
+        id: instance.dnx_assessment_instanceid,
+        name: instance.dnx_assessment_name,
+        statuscode: instance.statuscode,
+        outcome: instance.dnx_outcome ?? null,
+        outcomeNotes: instance.dnx_outcome_notes ?? null,
+        dueDate: instance.dnx_duedate ?? null,
+        submittedOn: instance.dnx_submittedon ?? null,
+        projectId: lookupId(instance, 'dnx_project') ?? null,
+        templateId: lookupId(instance, 'dnx_assessmenttemplate') ?? null,
+      },
+      responses: responses.map((r) => ({
+        levelId: lookupId(r, 'dnx_assessment_level') ?? null,
+        questionName: r.dnx_name,
+        boolean: r.dnx_response_boolean ?? null,
+        option: r.dnx_response_option ?? null,
+        multi: r.dnx_response_multi ?? null,
+        text: r.dnx_response_text ?? null,
+        date: r.dnx_response_date ?? null,
+      })),
+    };
+
+    const versionRow = await Dnx_assessment_versionsService.create({
+      dnx_version_number: String(versionNumber),
+      dnx_change_summary: changeReason,
+      'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+      statecode: 0,
+      statuscode: 1,
+    } as unknown as Omit<Dnx_assessment_versionsBase, 'dnx_assessment_versionid'>);
+
+    if (!versionRow.success || !versionRow.data) {
+      console.warn('[snapshot] version row create failed', versionRow.error);
+      return;
+    }
+
+    const fileName = `snapshot-v${versionNumber}-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:.]/g, '-')}.json`;
+
+    const client = getClient(dataSourcesInfo);
+    const upload = await client.uploadFileToRecord(
+      'dnx_assessment_versions',
+      versionRow.data.dnx_assessment_versionid,
+      'dnx_snapsho_tjson',
+      fileName,
+      JSON.stringify(snapshot),
+    );
+    if (!upload.success) {
+      console.warn('[snapshot] file upload failed', upload.error);
+    }
+  } catch (e) {
+    console.warn('[snapshot] threw', e);
   }
 }
 
@@ -330,6 +434,9 @@ export function useSubmitForReview(instanceId: string) {
       if (projectId) {
         qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
       }
+      // Snapshot the submitted state — this becomes the canonical reviewer
+      // record. Uses the post-update version that's already in `data`.
+      void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Submitted');
     },
   });
 }
@@ -376,6 +483,9 @@ export function useReopenAssessment(instanceId: string) {
       if (projectId) {
         qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
       }
+      // Snapshot the reopen event so the audit log records who pulled the
+      // submission back and at what version.
+      void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Reopened');
     },
   });
 }

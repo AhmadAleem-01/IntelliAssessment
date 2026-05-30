@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-30 (M4c part 1 + lock/reopen shipped).
+> Read this first when returning to the project. Last updated: 2026-05-30 (M4c.2 audit snapshots shipped).
 
 ## What this is
 
@@ -23,7 +23,7 @@ The detailed product spec lives in two places:
 | **M4a** Assessment instance CRUD | ✅ done | Start-assessment dialog (picks published template + due date); per-project + global lists; instance shell page with metadata hero |
 | **M4b** Checklist runtime | ✅ done | Recursive per-data-type field renderer, response upsert (create-or-update), conditional visibility hiding, autosave indicator, text-field debounce, smooth reveal animation |
 | **M4c.1** Version bump + submit/reopen workflow | ✅ done | Per-save `dnx_version` increment, Submit-for-review with required-field validation, lock + Reopen workflow when status ≥ PendingReview |
-| **M4c.2** Per-save audit snapshots | not started | Write JSON snapshot to `dnx_assessment_versions.dnx_snapsho_tjson` (Dataverse File column — two-call create + `uploadFileToRecord` pattern) |
+| **M4c.2** Per-save audit snapshots | ✅ done | JSON snapshot of (instance + all responses) lands in `dnx_assessment_versions.dnx_snapsho_tjson` (File column) on every save, submit, and reopen. Fire-and-forget so it never blocks the assessor's save. |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
 | **M7** Rule engine & scoring | not started | |
@@ -40,6 +40,7 @@ The detailed product spec lives in two places:
 - **Assessment instance CRUD** — *Start assessment* button on each project's detail page opens a dialog that lets the user pick a Published template (Draft/Deprecated templates filtered out) and optionally set a due date. Name pre-fills to `<project> — <today>`. Both `dnx_Project` and `dnx_AssessmentTemplate` lookups bound via `@odata.bind`. The project detail page shows all instances under that project; the global `/assessments` page lists every instance across all projects with status pills (Draft / In progress / Pending review / Complete).
 - **Assessment runtime (M4b)** — Open any assessment instance and you get a fillable checklist of the template's level tree. Each Section is a collapsible card with a *N / M answered* summary; Subsections render as nested blocks; Questions render with their label, required asterisk, purple letter-flag dot, and per-data-type input (Boolean Yes/No toggle • OptionSet single dropdown • Multiselect checkbox group • multi-line Text textarea • native Date picker). Every change upserts a row in `dnx_assessment_responses` keyed by (instance, level); the matching `dnx_response_*` column is written and the other four are explicitly blanked. Text fields **debounce at 800 ms** so we get one write per pause; Boolean/OptionSet/Multi/Date fire immediately. A small **autosave indicator** in the hero meta row cycles through *Autosave on* → *Saving...* (purple pulse) → *Saved at HH:MM* (green check) → *Save failed — retry* (red error).
 - **Submit / Reopen workflow (M4c.1)** — Every successful response save bumps `dnx_assessment_instances.dnx_version` and the `v{n}` chip in the hero refreshes optimistically. The hero exposes a **Submit for review** button (Draft / InProgress states only) that opens a confirmation dialog. The dialog calls `validateSubmission()` — walks the level tree and surfaces a scrollable list of required visible questions that are still unanswered, blocking submit until they're all answered. Submit flips `statuscode` to PendingReview (778540003), stamps today's date into `dnx_submittedon`, bumps version. Once submitted, the checklist becomes read-only: a lock banner appears at the top with a **Reopen for edits** button (PendingReview) or a finalised message (Complete). Reopen flips `statuscode` back to InProgress (778540002), bumps version, and unlocks every input. `dnx_submittedon` is deliberately retained across reopen cycles as the historical fact of submission.
+- **Per-save audit snapshots (M4c.2)** — Every save, submit, and reopen also writes a `dnx_assessment_versions` row with a JSON snapshot of the full instance state (metadata + every response value) attached to its `dnx_snapsho_tjson` File column. The snapshot includes `capturedAt`, `reason` (`Autosave` / `Submitted` / `Reopened`), the instance fields, and a flat array of `{ levelId, questionName, boolean, option, multi, text, date }`. Calls are fire-and-forget — a snapshot failure logs to console but never blocks the assessor's save. Read by reviewers via the maker portal until a reviewer-side history UI is built. See gotcha O for the two-call File-column write pattern this uses.
 - **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
 - **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
 
@@ -245,6 +246,40 @@ The 404 wording is misleading — Dataverse doesn't say "wrong table", it just s
 
 No schema change needed. Use `parseOptions(stored)` / `serializeOptions(arr)` from `features/templates/levels/options.ts`. Legacy plain-text values fall back to a single-entry list so existing data still loads.
 
+### O. Dataverse File-type columns need a two-call write (`create` + `uploadFileToRecord`)
+
+File and Image columns can't be written via the normal `create()` / `update()` request body — the column is just a string reference in the model, not a value field. Write in two steps:
+
+```ts
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
+
+// 1. Create the row with all the normal scalar/lookup fields.
+const row = await Dnx_assessment_versionsService.create({
+  dnx_version_number: '5',
+  dnx_change_summary: 'Autosave',
+  'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+  statecode: 0,
+  statuscode: 1,
+});
+
+// 2. Upload the file contents to that row's file column. The SDK accepts
+//    string | Uint8Array | ArrayBuffer | Blob — strings (JSON, CSV, plain
+//    text) are uploaded as UTF-8 bytes.
+const client = getClient(dataSourcesInfo);
+await client.uploadFileToRecord(
+  'dnx_assessment_versions',          // entity-set name
+  row.data!.dnx_assessment_versionid, // row GUID from step 1
+  'dnx_snapsho_tjson',                 // file column logical name
+  'snapshot.json',                     // file name as it'll appear in Dataverse
+  jsonContent,
+);
+```
+
+The generated TS model exposes `<Entity>UploadColumnName` as a type listing every File/Image column. The Power Apps maker portal sometimes mangles column logical names (e.g. `snapshot_json` became `snapsho_tjson` here — note the underscore migration) — use the model's `UploadColumnName` constant rather than re-typing.
+
+Fire-and-forget pattern recommended for non-critical uploads (audit snapshots, attachments) so a file-upload failure can't block the user's primary mutation.
+
 ## Dataverse entity reference (publisher prefix `dnx_`)
 
 | Table | Logical name | Use |
@@ -296,44 +331,29 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-**M4b + M4c.1 shipped** (fillable checklist, autosave badge, version bump, Submit/Reopen workflow with required-field validation). Several reasonable next directions:
+**M4 is fully shipped** (M4a → M4c.2). The assessor side of the product is end-to-end: instance creation, fillable checklist with autosave, conditional visibility, submit-for-review with required-field validation, lock + reopen workflow, and full per-save audit snapshots. The next logical milestone is **M5 — Reviewer experience and / or evidence files**.
 
-### Option A — M4c.2: Per-save audit snapshots
+### Option A — Reviewer-side UI (recommended)
 
-Write a JSON snapshot of the full instance state (all responses + outcome + statuscode) into `dnx_assessment_versions.dnx_snapsho_tjson` on every save. The complication: `dnx_snapsho_tjson` is a **Dataverse File-type column** (note the typo in the schema — that IS the actual column name), so writes go through a two-call pattern:
+The snapshots we now write to `dnx_assessment_versions` are pure waste without a reviewer who reads them. Build the reviewer side:
 
-```ts
-const row = await Dnx_assessment_versionsService.create({
-  dnx_version_number: String(newVersion),
-  dnx_change_summary: 'Autosave',
-  'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
-});
-await getClient(dataSourcesInfo).uploadFileToRecord(
-  'dnx_assessment_versions',
-  row.data!.dnx_assessment_versionid,
-  'dnx_snapsho_tjson',
-  'snapshot.json',
-  JSON.stringify(snapshot),
-);
-```
-
-Snapshots only become meaningful once there's a reviewer-side diff/history view. Probably wait until you actually need it.
+1. **Reviewer dashboard** — list of instances in `PendingReview` status, sorted by submitted date. Probably gated to the Reviewer role (see Option D below for the role-detection plumbing).
+2. **Snapshot viewer** — open a version row, fetch the file via `downloadFileFromRecord('dnx_assessment_versions', versionId, 'dnx_snapsho_tjson')`, render the JSON as a read-only view of the assessment state at that point. Bonus: a diff view between two versions.
+3. **Approve / reject actions** — flip statuscode to Complete (778540004) or kick back to Draft (778540001). Sets the final outcome on the instance.
+4. **Threaded comments** — PRD §6.10's `dnx_reviewer_comments` table is ready. Self-reference via `parent_comment_id` for threading.
 
 ### Option B — M5: Evidence files
 
-PRD §2.4 / §6.8. File upload at the section/subsection level → SharePoint via Power Automate → `dnx_evidence_files` row with `sharepoint_url`. Needs the SharePoint connector configured + a Power Automate flow. Bigger build, requires platform plumbing.
+PRD §2.4 / §6.8. File upload at the section/subsection level → SharePoint via Power Automate → `dnx_evidence_files` row with `sharepoint_url`. Needs the SharePoint connector configured + a Power Automate flow. Bigger build, requires platform plumbing. Less urgent if assessors aren't yet asking for it.
 
-### Option C — Reviewer experience
+### Option C — Smaller polish (any of these)
 
-Right now there's no UI for what a Reviewer sees after Submit. Build a "Reviewer dashboard" + threaded comments (`dnx_reviewer_comments`) + approve/reject actions (flip to Complete or back to Draft).
-
-### Option D — Smaller polish (any of these)
-
-- **Role-gated actions** — Submit + Reopen + Delete are currently visible to every signed-in user. Wire up Entra/Dataverse role detection (Assessor / Reviewer / Admin per PRD §5.1) and hide actions accordingly. Server-side enforcement is the real barrier, UI hiding is just polish, but it's worth getting right.
+- **Role-gated actions** — Submit + Reopen + Delete are currently visible to every signed-in user. Wire up Entra/Dataverse role detection (Assessor / Reviewer / Admin per PRD §5.1) and hide actions accordingly. Server-side enforcement is the real barrier (Dataverse security roles already gate the writes), UI hiding is just polish — but it's worth getting right before the reviewer dashboard ships, since the reviewer dashboard needs to know who's a reviewer.
 - **Code-split with `React.lazy()`** — bundle is ~830 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
 - **Multi-value visibility rules** — currently a rule has a single RHS value. The runtime contract is forward-compatible (`value: string[]` would migrate cleanly with a parser update). Add when there's actual demand.
 - **Section progress bars** in the assessment runtime header — visual `answered / total` ring per section, plus an overall instance progress.
 - **Mobile responsiveness audit** — the topbar nav + tree editor haven't been tested at narrow viewports.
+- **Throttle audit snapshots** — currently every keystroke (after debounce) writes one version row + one file. For long assessment sessions this fills `dnx_assessment_versions` quickly. Reasonable optimization: skip the snapshot when fewer than ~30 s have passed since the last Autosave snapshot; always snapshot on Submit/Reopen.
 
 ## Useful links
 
