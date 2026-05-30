@@ -19,7 +19,7 @@ import type { LevelType } from '../templates/levels/levelTypes';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import { useCriteriaForLevels } from './api';
 import { CriteriaEditor } from './CriteriaEditor';
-import { OPERATOR_LABEL, type Criteria } from './types';
+import { OPERATOR_LABEL, parseGroups, type Criteria } from './types';
 
 const useStyles = makeStyles({
   root: {
@@ -223,9 +223,16 @@ function summariseCriteria(c: Criteria | undefined, levelType: LevelType): strin
     return `${op}${target}`;
   }
   // Parent rule — show scoring mode + threshold in plain English.
-  return c.scoringType === 'Weighted'
-    ? `At least ${Math.round(c.passThreshold * 100)}% must pass`
-    : 'Every child must pass';
+  if (c.scoringType === 'Weighted') {
+    return `At least ${Math.round(c.passThreshold * 100)}% must pass`;
+  }
+  if (c.scoringType === 'Grouped') {
+    const groups = parseGroups(c.targetValue);
+    return groups.length === 0
+      ? 'By groups (none defined)'
+      : `By groups (${groups.length})`;
+  }
+  return 'Every child must pass';
 }
 
 interface Props {
@@ -404,7 +411,9 @@ function AssessmentOutcomeRow({
   const summary = criteria
     ? criteria.scoringType === 'Weighted'
       ? `At least ${Math.round(criteria.passThreshold * 100)}% must pass`
-      : 'Every section must pass'
+      : criteria.scoringType === 'Grouped'
+        ? `By groups (${parseGroups(criteria.targetValue).length})`
+        : 'Every section must pass'
     : '';
 
   async function handleExpand() {

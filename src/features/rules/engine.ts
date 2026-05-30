@@ -6,10 +6,12 @@ import type { LevelNode } from '../templates/levels/treeBuilder';
 import {
   type Criteria,
   type EvaluationOutcome,
+  type ScoringGroup,
   OUTCOME_PASS_LABEL,
   OUTCOME_FAIL_LABEL,
   OPERATOR_LABEL,
   operatorsForDataType,
+  parseGroups,
 } from './types';
 
 /** Format an answer value for display in an explanation. */
@@ -153,12 +155,21 @@ export interface AggregateChild {
   weight: number;
   /** Child level name — surfaced in the parent's explanation tooltip. */
   name: string;
+  /** Child level GUID — used by Grouped scoring to match group members. */
+  levelId: string;
 }
 
 export function aggregateChildOutcomes(
   parentCriteria: Criteria,
   children: AggregateChild[],
 ): EvaluationOutcome {
+  // Grouped scoring branches out before the standard pass/fail-count path.
+  // Each group is one composite vote; ungrouped descendants are still
+  // required to pass individually. See `aggregateGrouped` below.
+  if (parentCriteria.scoringType === 'Grouped') {
+    return aggregateGrouped(parentCriteria, children);
+  }
+
   const evaluable = children.filter(
     (c) => c.outcome.kind === 'pass' || c.outcome.kind === 'fail',
   );
@@ -224,6 +235,118 @@ function weightFor(criteria: Criteria | undefined): number {
 }
 
 /**
+ * Grouped aggregation: each group is a composite voting unit.
+ *
+ * - A group passes when at least `minToPass` of its evaluable members passed.
+ * - Members listed in a group but absent from the current `children` set
+ *   (typo, deleted question, etc.) are silently skipped.
+ * - Children NOT mentioned by any group are treated as individually required
+ *   — any one of them failing fails the parent. Keeps "leftover" answers
+ *   from being silently ignored.
+ * - The parent passes when every group passes AND every ungrouped child passes.
+ */
+function aggregateGrouped(
+  parentCriteria: Criteria,
+  children: AggregateChild[],
+): EvaluationOutcome {
+  const groups = parseGroups(parentCriteria.targetValue);
+  if (groups.length === 0) {
+    // Author flipped to Grouped mode but hasn't defined any group yet —
+    // surface that explicitly rather than silently passing.
+    return {
+      kind: 'not-evaluable',
+      reason: 'bad-config',
+      explanation: 'Grouped scoring is selected but no groups are defined.',
+    };
+  }
+
+  // Index children by level id for quick lookup during group evaluation.
+  const childByLevelId = new Map<string, AggregateChild>(
+    children.map((c) => [c.levelId, c] as const),
+  );
+
+  const groupOutcomes: Array<{
+    group: ScoringGroup;
+    passed: boolean;
+    passedCount: number;
+    evaluableCount: number;
+  }> = [];
+  const groupedIds = new Set<string>();
+  for (const group of groups) {
+    let passedCount = 0;
+    let evaluableCount = 0;
+    for (const memberId of group.memberLevelIds) {
+      groupedIds.add(memberId);
+      const child = childByLevelId.get(memberId);
+      if (!child) continue;
+      if (child.outcome.kind === 'pass') {
+        passedCount += 1;
+        evaluableCount += 1;
+      } else if (child.outcome.kind === 'fail') {
+        evaluableCount += 1;
+      }
+    }
+    groupOutcomes.push({
+      group,
+      passed: evaluableCount > 0 && passedCount >= group.minToPass,
+      passedCount,
+      evaluableCount,
+    });
+  }
+
+  // Ungrouped children — treated as individual must-pass leftovers.
+  const ungrouped = children.filter((c) => !groupedIds.has(c.levelId));
+  const ungroupedEvaluable = ungrouped.filter(
+    (c) => c.outcome.kind === 'pass' || c.outcome.kind === 'fail',
+  );
+  const ungroupedFailed = ungroupedEvaluable.filter(
+    (c) => c.outcome.kind === 'fail',
+  );
+
+  // Need at least one definitive signal somewhere — otherwise the parent
+  // can't claim a verdict.
+  const anyGroupEvaluable = groupOutcomes.some((g) => g.evaluableCount > 0);
+  if (!anyGroupEvaluable && ungroupedEvaluable.length === 0) {
+    return {
+      kind: 'not-evaluable',
+      reason: 'no-children',
+      explanation: 'No grouped members or ungrouped children have a definitive outcome yet.',
+    };
+  }
+
+  const allGroupsPass = groupOutcomes.every((g) => g.passed);
+  const ungroupedPass = ungroupedFailed.length === 0;
+  const passed = allGroupsPass && ungroupedPass;
+
+  // Build a plain-English explanation: "Group A 2/3 ≥ 2 ✓ · Group B 1/2 ≥ 2 ✗ · Failed: Q5"
+  const groupSummary = groupOutcomes
+    .map(
+      (g) =>
+        `${g.group.name} ${g.passedCount}/${g.evaluableCount} ≥ ${g.group.minToPass} ${
+          g.passed ? '✓' : '✗'
+        }`,
+    )
+    .join(' · ');
+  const ungroupedTail =
+    ungroupedFailed.length > 0
+      ? ` Ungrouped failed: ${ungroupedFailed.map((c) => c.name).join(', ')}.`
+      : '';
+  const explanation = `${groupSummary}.${ungroupedTail}`;
+
+  return passed
+    ? {
+        kind: 'pass',
+        label: OUTCOME_PASS_LABEL[parentCriteria.outcomeIfPass],
+        explanation,
+      }
+    : {
+        kind: 'fail',
+        label: OUTCOME_FAIL_LABEL[parentCriteria.outcomeIfFail],
+        explanation,
+      };
+}
+
+/**
  * Evaluate a single node (any level type) by walking its subtree.
  *
  * - Question (type 3): forwards to `evaluateQuestion`.
@@ -259,6 +382,7 @@ export function evaluateNode(
       outcome,
       weight: weightFor(childCriteria),
       name: child.level.dnx_name,
+      levelId: child.level.dnx_assessment_levelid,
     };
   });
 
@@ -299,10 +423,11 @@ export function evaluateAssessment(
   if (sectionNodes.length === 0) {
     return { kind: 'not-evaluable', reason: 'no-children' };
   }
-  const perSection = sectionNodes.map((n) => ({
+  const perSection: AggregateChild[] = sectionNodes.map((n) => ({
     name: n.level.dnx_name,
     outcome: evaluateNode(n, criteriaByLevelId, responsesByLevelId),
     weight: weightFor(criteriaByLevelId?.get(n.level.dnx_assessment_levelid)),
+    levelId: n.level.dnx_assessment_levelid,
   }));
 
   if (rootCriteria) {

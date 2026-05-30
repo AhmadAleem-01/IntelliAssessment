@@ -24,9 +24,13 @@ import {
   OPERATOR_LABEL,
   operatorsForDataType,
   operatorNeedsTarget,
+  parseGroups,
+  serializeGroups,
   type OperatorKey,
   type ScoringTypeKey,
+  type ScoringGroup,
 } from './types';
+import { GroupListEditor } from './GroupListEditor';
 
 const useStyles = makeStyles({
   root: {
@@ -103,6 +107,8 @@ interface DraftState {
   scoringType: ScoringTypeKey;
   /** Percent (0–100) — Weighted mode pass threshold. */
   passThresholdPct: number;
+  /** Groups (Grouped mode only). Empty otherwise. */
+  groups: ScoringGroup[];
 }
 
 // Outcomes are no longer user-selectable — every rule passes as "Suitable"
@@ -117,6 +123,7 @@ function defaultDraft(_levelType: number, dataType: DataType): DraftState {
     importance: 1,
     scoringType: 'Boolean',
     passThresholdPct: 50,
+    groups: [],
   };
 }
 
@@ -156,6 +163,11 @@ export function CriteriaEditor({ level }: Props) {
         scoringType: existing.scoringType,
         // Stored 0–1 internally; surfaced as 0–100% in the editor.
         passThresholdPct: Math.round((existing.passThreshold ?? 0.5) * 100),
+        // Groups live in target_value when scoringType is Grouped; for other
+        // modes target_value is just an empty string (Question rules don't
+        // reuse this field at parent level).
+        groups:
+          existing.scoringType === 'Grouped' ? parseGroups(existing.targetValue) : [],
       });
     } else if (!isLoading) {
       setDraft(defaultDraft(levelType, dataType));
@@ -179,6 +191,13 @@ export function CriteriaEditor({ level }: Props) {
     // sourceType maps level type → which roll-up tier the criteria belongs to.
     // 0 = Question Value, 1 = Subsection Outcome, 2 = Section Outcome.
     const sourceType: 0 | 1 | 2 = isQuestion ? 0 : levelType === 2 ? 1 : 2;
+    // target_value is overloaded for parent Grouped rules: it carries the
+    // serialized groups JSON. Questions still use it as the comparison
+    // target string; parents in Boolean/Weighted mode leave it empty.
+    let parentTargetValue = '';
+    if (!isQuestion && draft.scoringType === 'Grouped') {
+      parentTargetValue = serializeGroups(draft.groups);
+    }
     const id = await upsert.mutateAsync({
       id: existing?.id,
       levelId,
@@ -186,7 +205,7 @@ export function CriteriaEditor({ level }: Props) {
       // so the criteria row reads sensibly in the maker portal.
       name: levelType === 0 ? 'Assessment outcome rule' : `${level.dnx_name} rule`,
       operator: draft.operator,
-      targetValue: needsTarget ? draft.targetValue : '',
+      targetValue: isQuestion ? (needsTarget ? draft.targetValue : '') : parentTargetValue,
       // Outcomes collapsed to a single Suitable / Not suitable pair.
       outcomeIfPass: 'Suitable',
       outcomeIfFail: 'NotSuitable',
@@ -330,7 +349,9 @@ export function CriteriaEditor({ level }: Props) {
                 hint={
                   draft.scoringType === 'Boolean'
                     ? 'Every child must pass for this level to pass.'
-                    : 'Pass when at least this percent of children pass.'
+                    : draft.scoringType === 'Weighted'
+                      ? 'Pass when at least this percent of children pass.'
+                      : 'Define groups of questions where only N of M members need to pass. Ungrouped children must still pass individually.'
                 }
               >
                 <Dropdown
@@ -338,7 +359,9 @@ export function CriteriaEditor({ level }: Props) {
                   value={
                     draft.scoringType === 'Boolean'
                       ? 'Every child must pass'
-                      : 'At least X% must pass'
+                      : draft.scoringType === 'Weighted'
+                        ? 'At least X% must pass'
+                        : 'By groups (N of M)'
                   }
                   selectedOptions={[draft.scoringType]}
                   onOptionSelect={(_, d) => {
@@ -349,6 +372,7 @@ export function CriteriaEditor({ level }: Props) {
                 >
                   <Option value="Boolean">Every child must pass</Option>
                   <Option value="Weighted">At least X% must pass</Option>
+                  <Option value="Grouped">By groups (N of M)</Option>
                 </Dropdown>
               </Field>
 
@@ -374,6 +398,14 @@ export function CriteriaEditor({ level }: Props) {
                     contentAfter="%"
                   />
                 </Field>
+              )}
+
+              {draft.scoringType === 'Grouped' && (
+                <GroupListEditor
+                  level={level}
+                  groups={draft.groups}
+                  onChange={(groups) => patch({ groups })}
+                />
               )}
             </>
           )}

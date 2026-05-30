@@ -34,6 +34,49 @@ export const SCORING_TYPE = {
 export type ScoringTypeKey = keyof typeof SCORING_TYPE;
 
 /**
+ * A scoring group bundles N descendant questions of a parent level into a
+ * single composite voting unit. The group "passes" when at least
+ * `minToPass` of its evaluable members passed. Stored as JSON in the parent
+ * criteria's `dnx_target_value` field (only meaningful when
+ * scoringType === 'Grouped') — keeps groups atomic with the parent rule
+ * instead of juggling membership rows in `dnx_scoring_groups`.
+ */
+export interface ScoringGroup {
+  name: string;
+  minToPass: number;
+  /** Level GUIDs of descendant questions that belong to this group. */
+  memberLevelIds: string[];
+}
+
+/** Try to parse a JSON-encoded groups array out of a target_value string. */
+export function parseGroups(targetValue: string | undefined): ScoringGroup[] {
+  if (!targetValue) return [];
+  try {
+    const parsed = JSON.parse(targetValue);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((g): g is ScoringGroup =>
+        typeof g === 'object' &&
+        g !== null &&
+        typeof g.name === 'string' &&
+        typeof g.minToPass === 'number' &&
+        Array.isArray(g.memberLevelIds),
+      )
+      .map((g) => ({
+        name: g.name,
+        minToPass: g.minToPass,
+        memberLevelIds: g.memberLevelIds.map(String),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function serializeGroups(groups: ScoringGroup[]): string {
+  return JSON.stringify(groups);
+}
+
+/**
  * What the evaluator returns for any single level (question, sub, section).
  * `explanation` is a short human-readable phrase the UI can surface on the
  * chip's tooltip — e.g. "Answer 'Yes' satisfies 'Is true'" for a question or
