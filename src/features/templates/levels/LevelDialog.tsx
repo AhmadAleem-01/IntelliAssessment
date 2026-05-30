@@ -29,6 +29,7 @@ import {
 import { OptionListEditor } from './OptionListEditor';
 import { parseOptions, serializeOptions } from './options';
 import { VisibilityRuleEditor } from './VisibilityRuleEditor';
+import { CriteriaEditor } from '../../rules/CriteriaEditor';
 import { parseVisibility, type VisibilityRule } from './visibility';
 import { eligibleParents } from './eligibleParents';
 import { useTemplateLevels } from './api';
@@ -412,6 +413,30 @@ export function LevelDialog(props: Props) {
                       parents={parents}
                       onChange={(rule) => patch({ visibilityRule: rule })}
                     />
+
+                    {isEdit && (
+                      <>
+                        <div className={styles.sectionDivider} />
+                        <div className={styles.sectionLabel}>Evaluation</div>
+                        <CriteriaEditor level={props.level} />
+                      </>
+                    )}
+                    {!isEdit && (
+                      <>
+                        <div className={styles.sectionDivider} />
+                        <div className={styles.sectionLabel}>Evaluation</div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--color-text-secondary)',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          Pass / fail rules can be added after the question is created.
+                          Save first, then reopen this question to configure evaluation.
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
 

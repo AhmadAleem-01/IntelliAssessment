@@ -28,6 +28,8 @@ import {
 import { indexResponses, isQuestionVisible, hasAnswer } from './responseHelpers';
 import { lookupId } from '../../lib/dataverse';
 import { QuestionRow } from './QuestionRow';
+import { useCriteriaForLevels } from '../rules/api';
+import type { Criteria } from '../rules/types';
 
 const useStyles = makeStyles({
   root: {
@@ -294,6 +296,16 @@ export function ChecklistRenderer({
     error: respError,
   } = useAssessmentResponses(instanceId);
 
+  // All Question-type level ids — used to pull evaluation criteria in one shot.
+  const questionLevelIds = useMemo(
+    () =>
+      (levels ?? [])
+        .filter((l) => (l.dnx_assessment_level_type as LevelType) === 3)
+        .map((l) => l.dnx_assessment_levelid),
+    [levels],
+  );
+  const { data: criteriaByLevelId } = useCriteriaForLevels(questionLevelIds);
+
   if (levelsLoading || respLoading) {
     return <Spinner label="Loading checklist..." size="small" />;
   }
@@ -405,6 +417,7 @@ export function ChecklistRenderer({
           levelsById={levelsById}
           responsesByLevelId={responsesByLevelId}
           flagsByLevelId={flagsByLevelId}
+          criteriaByLevelId={criteriaByLevelId}
           rowRefs={rowRefs.current}
           onAnswer={(level, value) =>
             upsert.mutate({
@@ -429,6 +442,7 @@ interface SectionBlockProps {
   levelsById: Map<string, Dnx_assessment_levels>;
   responsesByLevelId: ReturnType<typeof indexResponses>;
   flagsByLevelId: Map<string, Dnx_reviewer_comments[]>;
+  criteriaByLevelId: Map<string, Criteria> | undefined;
   rowRefs: Map<string, HTMLDivElement | null>;
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
   onResolveFlag: (commentId: string) => void;
@@ -441,6 +455,7 @@ function SectionBlock({
   levelsById,
   responsesByLevelId,
   flagsByLevelId,
+  criteriaByLevelId,
   rowRefs,
   onAnswer,
   onResolveFlag,
@@ -491,6 +506,7 @@ function SectionBlock({
               levelsById={levelsById}
               responsesByLevelId={responsesByLevelId}
               flagsByLevelId={flagsByLevelId}
+              criteriaByLevelId={criteriaByLevelId}
               rowRefs={rowRefs}
               onAnswer={onAnswer}
               onResolveFlag={onResolveFlag}
@@ -505,6 +521,7 @@ function SectionBlock({
               levelsById={levelsById}
               responsesByLevelId={responsesByLevelId}
               flagsByLevelId={flagsByLevelId}
+              criteriaByLevelId={criteriaByLevelId}
               rowRefs={rowRefs}
               onAnswer={onAnswer}
               onResolveFlag={onResolveFlag}
@@ -525,6 +542,7 @@ function SubsectionBlock({
   levelsById,
   responsesByLevelId,
   flagsByLevelId,
+  criteriaByLevelId,
   rowRefs,
   onAnswer,
   onResolveFlag,
@@ -583,6 +601,7 @@ function SubsectionBlock({
                   levelsById={levelsById}
                   responsesByLevelId={responsesByLevelId}
                   flagsByLevelId={flagsByLevelId}
+                  criteriaByLevelId={criteriaByLevelId}
                   rowRefs={rowRefs}
                   onAnswer={onAnswer}
                   onResolveFlag={onResolveFlag}
@@ -602,6 +621,7 @@ interface QuestionItemProps {
   levelsById: Map<string, Dnx_assessment_levels>;
   responsesByLevelId: ReturnType<typeof indexResponses>;
   flagsByLevelId: Map<string, Dnx_reviewer_comments[]>;
+  criteriaByLevelId: Map<string, Criteria> | undefined;
   rowRefs: Map<string, HTMLDivElement | null>;
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
   onResolveFlag: (commentId: string) => void;
@@ -614,6 +634,7 @@ function QuestionItem({
   levelsById,
   responsesByLevelId,
   flagsByLevelId,
+  criteriaByLevelId,
   rowRefs,
   onAnswer,
   onResolveFlag,
@@ -627,6 +648,7 @@ function QuestionItem({
   const response = responsesByLevelId.get(level.dnx_assessment_levelid);
   const levelId = level.dnx_assessment_levelid;
   const flags = flagsByLevelId.get(levelId);
+  const criteria = criteriaByLevelId?.get(levelId);
   return (
     <div
       className={`reveal ${visible ? 'reveal-show' : 'reveal-hide'}`}
@@ -646,6 +668,7 @@ function QuestionItem({
         flags={flags}
         onResolveFlag={onResolveFlag}
         resolvingFlagId={resolvingFlagId}
+        criteria={criteria}
       />
     </div>
   );

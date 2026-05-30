@@ -1,6 +1,11 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import { makeStyles } from '@fluentui/react-components';
-import { Flag16Regular, CheckmarkCircle16Regular } from '@fluentui/react-icons';
+import {
+  Flag16Regular,
+  CheckmarkCircle16Regular,
+  CheckmarkCircle16Filled,
+  DismissCircle16Filled,
+} from '@fluentui/react-icons';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { Dnx_assessment_responses } from '../../generated/models/Dnx_assessment_responsesModel';
 import type { Dnx_reviewer_comments } from '../../generated/models/Dnx_reviewer_commentsModel';
@@ -14,6 +19,8 @@ import {
   TextField,
   DateField,
 } from './fields/Fields';
+import { evaluateQuestion } from '../rules/engine';
+import type { Criteria } from '../rules/types';
 
 const TEXT_DEBOUNCE_MS = 800;
 
@@ -45,6 +52,27 @@ const useStyles = makeStyles({
     height: '6px',
     borderRadius: '50%',
     backgroundColor: 'var(--color-purple)',
+  },
+  outcomeChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.02em',
+    lineHeight: 1.3,
+  },
+  outcomeChipPass: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+    border: '0.5px solid var(--color-green)',
+  },
+  outcomeChipFail: {
+    backgroundColor: 'var(--color-red-soft, #fde2e1)',
+    color: 'var(--color-red-text, #8a1f1a)',
+    border: '0.5px solid var(--color-red, #c4302b)',
   },
   hint: {
     fontSize: '11px',
@@ -128,10 +156,12 @@ interface Props {
   flags?: Dnx_reviewer_comments[];
   onResolveFlag?: (commentId: string) => void;
   resolvingFlagId?: string | null;
+  /** Optional pass/fail rule attached to this question. */
+  criteria?: Criteria;
 }
 
 export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRow(
-  { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId },
+  { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId, criteria },
   ref,
 ) {
   const styles = useStyles();
@@ -191,6 +221,10 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
   }
 
   const hasFlags = (flags?.length ?? 0) > 0;
+  // Live preview chip — only renders when the question has both an evaluable
+  // answer and a configured rule. `not-evaluable` outcomes stay silent so the
+  // checklist isn't cluttered by every unanswered question.
+  const outcome = evaluateQuestion(level, criteria, response);
 
   return (
     <div ref={ref} className={`${styles.row} ${hasFlags ? styles.flagged : ''}`}>
@@ -201,6 +235,18 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
         </span>
         {level.dnx_include_in_letter && (
           <span className={styles.letterDot} title="Included in outcome letter" />
+        )}
+        {outcome.kind === 'pass' && (
+          <span className={`${styles.outcomeChip} ${styles.outcomeChipPass}`}>
+            <CheckmarkCircle16Filled />
+            {outcome.label}
+          </span>
+        )}
+        {outcome.kind === 'fail' && (
+          <span className={`${styles.outcomeChip} ${styles.outcomeChipFail}`}>
+            <DismissCircle16Filled />
+            {outcome.label}
+          </span>
         )}
       </div>
       {level.dnx_hint_text && <div className={styles.hint}>{level.dnx_hint_text}</div>}
