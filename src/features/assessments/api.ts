@@ -246,6 +246,136 @@ export function useUpsertResponse(instanceId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: assessmentKeys.responses(instanceId) });
+      // Side-effect: bump the instance's version + invalidate so the autosave
+      // badge updates. Fire-and-forget — if the version bump fails for any
+      // reason we don't want to mask the successful response save.
+      void bumpInstanceVersion(qc, instanceId);
+    },
+  });
+}
+
+/**
+ * Increment `dnx_assessment_instances.dnx_version` by 1.
+ *
+ * Reads the current value from the React Query cache (already loaded by
+ * AssessmentPage's `useAssessmentInstance` query), writes back the next
+ * integer, and invalidates the detail query so the `v{n}` badge in the
+ * hero refreshes. Errors are logged but not re-thrown — the caller's
+ * primary mutation succeeded; we don't want to surface "version bump
+ * failed" toasts when the user already saw their answer save.
+ */
+async function bumpInstanceVersion(
+  qc: ReturnType<typeof useQueryClient>,
+  instanceId: string,
+): Promise<void> {
+  try {
+    const cached = qc.getQueryData<Dnx_assessment_instances>(
+      assessmentKeys.detail(instanceId),
+    );
+    const current = cached?.dnx_version ?? 0;
+    const next = current + 1;
+    await Dnx_assessment_instancesService.update(instanceId, {
+      dnx_version: next,
+    } as unknown as Partial<Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>>);
+    // Optimistic local update so the badge reads `v{next}` before the
+    // refetch lands.
+    if (cached) {
+      qc.setQueryData<Dnx_assessment_instances>(assessmentKeys.detail(instanceId), {
+        ...cached,
+        dnx_version: next,
+      });
+    }
+    qc.invalidateQueries({ queryKey: assessmentKeys.detail(instanceId) });
+  } catch (e) {
+    console.warn('[bumpInstanceVersion] failed', e);
+  }
+}
+
+/**
+ * Flip the instance from Draft → PendingReview after the assessor confirms
+ * submission. Sets `dnx_submittedon` to the current date (Edm.Date — gotcha B)
+ * and bumps the version one final time so the submission has a distinct slot.
+ *
+ * Caller is responsible for required-field validation BEFORE invoking this
+ * mutation — see `validateSubmission()` in responseHelpers.ts.
+ */
+export function useSubmitForReview(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<Dnx_assessment_instances> => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      const nextVersion = (cached?.dnx_version ?? 0) + 1;
+      const changes = {
+        statuscode: 778540003, // PendingReview
+        dnx_submittedon: new Date().toISOString().slice(0, 10),
+        dnx_version: nextVersion,
+      };
+      const r = await Dnx_assessment_instancesService.update(
+        instanceId,
+        changes as unknown as Partial<Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>>,
+      );
+      if (!r.success || !r.data) {
+        console.error('[submit assessment] failed', r.error, changes);
+        throw new Error(r.error?.message ?? 'Failed to submit');
+      }
+      return r.data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(assessmentKeys.detail(instanceId), data);
+      qc.invalidateQueries({ queryKey: assessmentKeys.list() });
+      const projectId = (data as unknown as Record<string, unknown>)
+        ._dnx_project_value as string | undefined;
+      if (projectId) {
+        qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
+      }
+    },
+  });
+}
+
+/**
+ * Reopen a previously-submitted assessment for further edits.
+ *
+ * Flips `statuscode` from PendingReview → InProgress (778540002) and bumps
+ * the version. The original `dnx_submittedon` date is deliberately left
+ * intact — it records that the assessment WAS submitted at some point even
+ * if it's been pulled back. A reviewer can still see this history once the
+ * audit-snapshot work (M4c.5) lands.
+ *
+ * Caller should confirm via dialog before invoking — there's no validation
+ * here, the assessor is consciously unlocking their own work.
+ */
+export function useReopenAssessment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<Dnx_assessment_instances> => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      const nextVersion = (cached?.dnx_version ?? 0) + 1;
+      const changes = {
+        statuscode: 778540002, // InProgress
+        dnx_version: nextVersion,
+      };
+      const r = await Dnx_assessment_instancesService.update(
+        instanceId,
+        changes as unknown as Partial<Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>>,
+      );
+      if (!r.success || !r.data) {
+        console.error('[reopen assessment] failed', r.error, changes);
+        throw new Error(r.error?.message ?? 'Failed to reopen');
+      }
+      return r.data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(assessmentKeys.detail(instanceId), data);
+      qc.invalidateQueries({ queryKey: assessmentKeys.list() });
+      const projectId = (data as unknown as Record<string, unknown>)
+        ._dnx_project_value as string | undefined;
+      if (projectId) {
+        qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
+      }
     },
   });
 }

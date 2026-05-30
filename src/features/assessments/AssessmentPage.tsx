@@ -12,8 +12,11 @@ import {
   CheckmarkCircle16Filled,
   ErrorCircle16Filled,
 } from '@fluentui/react-icons';
+import { Button } from '@fluentui/react-components';
+import { SendCopy20Regular } from '@fluentui/react-icons';
 import { useAssessmentInstance, useUpsertResponse } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
+import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
 
@@ -40,6 +43,12 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     minWidth: 0,
+    flex: 1,
+  },
+  headerActions: {
+    display: 'flex',
+    gap: '8px',
+    flexShrink: 0,
   },
   iconChip: {
     width: '32px',
@@ -266,6 +275,24 @@ export function AssessmentPage() {
             </div>
           </div>
         </div>
+        {/* Submit button only when the assessor is still actively editing.
+            On PendingReview / Complete the inline banner inside the checklist
+            handles the locked-state copy + Reopen action — no need to duplicate
+            actions in the hero. */}
+        {templateId && label !== 'PendingReview' && label !== 'Complete' && (
+          <div className={styles.headerActions}>
+            <SubmitAssessmentDialog
+              instanceId={assessment.dnx_assessment_instanceid}
+              templateId={templateId}
+              alreadySubmitted={false}
+              trigger={
+                <Button appearance="primary" icon={<SendCopy20Regular />}>
+                  Submit for review
+                </Button>
+              }
+            />
+          </div>
+        )}
       </div>
 
       <div className={styles.card}>
@@ -336,6 +363,9 @@ export function AssessmentPage() {
           instanceId={assessment.dnx_assessment_instanceid}
           templateId={templateId}
           upsert={upsert}
+          readOnly={label === 'PendingReview' || label === 'Complete'}
+          pendingReview={label === 'PendingReview'}
+          submittedOn={assessment.dnx_submittedon}
         />
       ) : (
         <div className={styles.placeholder}>

@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-30 (M4b + polish round shipped).
+> Read this first when returning to the project. Last updated: 2026-05-30 (M4c part 1 + lock/reopen shipped).
 
 ## What this is
 
@@ -22,7 +22,8 @@ The detailed product spec lives in two places:
 | **M3c** Conditional visibility editor | ✅ done | Author-time rule editor; `dnx_visibility_condition` text column on `dnx_assessment_levels`; runtime evaluator pending in M4 |
 | **M4a** Assessment instance CRUD | ✅ done | Start-assessment dialog (picks published template + due date); per-project + global lists; instance shell page with metadata hero |
 | **M4b** Checklist runtime | ✅ done | Recursive per-data-type field renderer, response upsert (create-or-update), conditional visibility hiding, autosave indicator, text-field debounce, smooth reveal animation |
-| **M4c** Version bump + audit snapshots | ⏳ next | Bump `dnx_assessment_instances.dnx_version` on save, snapshot to `dnx_assessment_versions`, surface "v14" in the autosave badge per design.md §11 |
+| **M4c.1** Version bump + submit/reopen workflow | ✅ done | Per-save `dnx_version` increment, Submit-for-review with required-field validation, lock + Reopen workflow when status ≥ PendingReview |
+| **M4c.2** Per-save audit snapshots | not started | Write JSON snapshot to `dnx_assessment_versions.dnx_snapsho_tjson` (Dataverse File column — two-call create + `uploadFileToRecord` pattern) |
 | **M5** Evidence files + SharePoint | not started | |
 | **M6** AI pipeline (OCR + extraction) | not started | |
 | **M7** Rule engine & scoring | not started | |
@@ -38,6 +39,7 @@ The detailed product spec lives in two places:
 - **Conditional visibility (authoring + runtime)** — Each Question's edit dialog has a *Visibility* section. Toggle "Conditional visibility" on, pick a source Question (Boolean / OptionSet / Multiselect), pick an operator (`equals`/`not equals` for single-value sources, `includes`/`does not include` for Multiselect), pick a value from the source's option list. The rule JSON is stored in `dnx_visibility_condition`. **At runtime** the checklist evaluates each rule against the current responses and hides non-matching questions with a smooth `max-height + opacity + translateY` reveal transition (CSS classes `reveal-show` / `reveal-hide` in `index.css`). Multiselect parents follow contains-semantics per the contract in `visibility.ts`. The source-question dropdown is grouped by parent path (`Section › Subsection`) so duplicate names are disambiguated.
 - **Assessment instance CRUD** — *Start assessment* button on each project's detail page opens a dialog that lets the user pick a Published template (Draft/Deprecated templates filtered out) and optionally set a due date. Name pre-fills to `<project> — <today>`. Both `dnx_Project` and `dnx_AssessmentTemplate` lookups bound via `@odata.bind`. The project detail page shows all instances under that project; the global `/assessments` page lists every instance across all projects with status pills (Draft / In progress / Pending review / Complete).
 - **Assessment runtime (M4b)** — Open any assessment instance and you get a fillable checklist of the template's level tree. Each Section is a collapsible card with a *N / M answered* summary; Subsections render as nested blocks; Questions render with their label, required asterisk, purple letter-flag dot, and per-data-type input (Boolean Yes/No toggle • OptionSet single dropdown • Multiselect checkbox group • multi-line Text textarea • native Date picker). Every change upserts a row in `dnx_assessment_responses` keyed by (instance, level); the matching `dnx_response_*` column is written and the other four are explicitly blanked. Text fields **debounce at 800 ms** so we get one write per pause; Boolean/OptionSet/Multi/Date fire immediately. A small **autosave indicator** in the hero meta row cycles through *Autosave on* → *Saving...* (purple pulse) → *Saved at HH:MM* (green check) → *Save failed — retry* (red error).
+- **Submit / Reopen workflow (M4c.1)** — Every successful response save bumps `dnx_assessment_instances.dnx_version` and the `v{n}` chip in the hero refreshes optimistically. The hero exposes a **Submit for review** button (Draft / InProgress states only) that opens a confirmation dialog. The dialog calls `validateSubmission()` — walks the level tree and surfaces a scrollable list of required visible questions that are still unanswered, blocking submit until they're all answered. Submit flips `statuscode` to PendingReview (778540003), stamps today's date into `dnx_submittedon`, bumps version. Once submitted, the checklist becomes read-only: a lock banner appears at the top with a **Reopen for edits** button (PendingReview) or a finalised message (Complete). Reopen flips `statuscode` back to InProgress (778540002), bumps version, and unlocks every input. `dnx_submittedon` is deliberately retained across reopen cycles as the historical fact of submission.
 - **Dashboard** — placeholder stat tiles + outcome breakdown card (counts are `—` until M8).
 - **App shell** — 52 px sticky topbar with brand mark + horizontal nav tabs (Dashboard / Projects / Assessments / Templates), notification icon + avatar on the right.
 
@@ -294,18 +296,41 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 ## Next session — start here
 
-**M4b is shipped** along with a polish round (autosave badge, smooth conditional reveal, insert-duplicate-adjacent-to-source, cross-parent drag in the template tree). The natural next chunk is **M4c — Version bump + audit snapshots**.
+**M4b + M4c.1 shipped** (fillable checklist, autosave badge, version bump, Submit/Reopen workflow with required-field validation). Several reasonable next directions:
 
-Concrete starting tasks for M4c:
+### Option A — M4c.2: Per-save audit snapshots
 
-1. **Bump `dnx_assessment_instances.dnx_version`** inside `useUpsertResponse`'s `onSuccess` — read current version from cache, increment by 1, write back. Surface the new version in the autosave badge ("Saved at 14:32 · v15") per design.md §11.
-2. **Snapshot to `dnx_assessment_versions`** on every save (or batched at submit-time). Each row stores `dnx_snapshot_json` (full instance state at this version), `dnx_version_number`, and `_dnx_assessment_value` link. Snapshot the responses array + outcome + statuscode.
-3. **Submit-for-review action** — currently `statuscode` stays at `Draft` forever. Add a "Submit" button that flips it to `PendingReview` (778540003) when all required questions answered. Block submit + show inline validation when any required question is empty or invisible-but-required.
-4. **(Stretch) Reviewer comments** — PRD §6.10 has `dnx_reviewer_comments`. A "Comments" tab on the instance page; threaded via `parent_comment_id`. Probably its own milestone (M5+); skip unless asked.
+Write a JSON snapshot of the full instance state (all responses + outcome + statuscode) into `dnx_assessment_versions.dnx_snapsho_tjson` on every save. The complication: `dnx_snapsho_tjson` is a **Dataverse File-type column** (note the typo in the schema — that IS the actual column name), so writes go through a two-call pattern:
 
-Remaining polish items that didn't fit this round:
+```ts
+const row = await Dnx_assessment_versionsService.create({
+  dnx_version_number: String(newVersion),
+  dnx_change_summary: 'Autosave',
+  'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+});
+await getClient(dataSourcesInfo).uploadFileToRecord(
+  'dnx_assessment_versions',
+  row.data!.dnx_assessment_versionid,
+  'dnx_snapsho_tjson',
+  'snapshot.json',
+  JSON.stringify(snapshot),
+);
+```
 
-- **Code-split with React.lazy()** — bundle is ~830 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
+Snapshots only become meaningful once there's a reviewer-side diff/history view. Probably wait until you actually need it.
+
+### Option B — M5: Evidence files
+
+PRD §2.4 / §6.8. File upload at the section/subsection level → SharePoint via Power Automate → `dnx_evidence_files` row with `sharepoint_url`. Needs the SharePoint connector configured + a Power Automate flow. Bigger build, requires platform plumbing.
+
+### Option C — Reviewer experience
+
+Right now there's no UI for what a Reviewer sees after Submit. Build a "Reviewer dashboard" + threaded comments (`dnx_reviewer_comments`) + approve/reject actions (flip to Complete or back to Draft).
+
+### Option D — Smaller polish (any of these)
+
+- **Role-gated actions** — Submit + Reopen + Delete are currently visible to every signed-in user. Wire up Entra/Dataverse role detection (Assessor / Reviewer / Admin per PRD §5.1) and hide actions accordingly. Server-side enforcement is the real barrier, UI hiding is just polish, but it's worth getting right.
+- **Code-split with `React.lazy()`** — bundle is ~830 kB / 240 kB gzipped; route-level splitting would meaningfully drop the first-paint cost.
 - **Multi-value visibility rules** — currently a rule has a single RHS value. The runtime contract is forward-compatible (`value: string[]` would migrate cleanly with a parser update). Add when there's actual demand.
 - **Section progress bars** in the assessment runtime header — visual `answered / total` ring per section, plus an overall instance progress.
 - **Mobile responsiveness audit** — the topbar nav + tree editor haven't been tested at narrow viewports.

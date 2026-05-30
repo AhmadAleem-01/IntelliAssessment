@@ -110,3 +110,77 @@ export function isQuestionVisible(
   const sourceResponse = responsesByLevelId.get(rule.showWhen.questionId);
   return evaluateCondition(rule.showWhen, sourceLevel, sourceResponse);
 }
+
+/** Whether a response row has any non-empty answer in any of its value columns. */
+export function hasAnswer(r: Dnx_assessment_responses | undefined): boolean {
+  if (!r) return false;
+  if (r.dnx_response_boolean !== undefined && r.dnx_response_boolean !== null) return true;
+  if (r.dnx_response_option) return true;
+  if (r.dnx_response_text) return true;
+  if (r.dnx_response_date) return true;
+  if (r.dnx_response_multi) {
+    try {
+      const arr = JSON.parse(r.dnx_response_multi);
+      return Array.isArray(arr) && arr.length > 0;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** A required question that's currently visible but has no answer recorded. */
+export interface MissingRequired {
+  levelId: string;
+  label: string;
+  /** Section › Subsection path so the assessor can locate it in a long template. */
+  path: string;
+}
+
+/**
+ * Walk all template levels and find required Questions that are visible
+ * (not hidden by a visibility rule) AND have no answer recorded. The
+ * assessment cannot be submitted while this list is non-empty.
+ */
+export function validateSubmission(
+  levels: Dnx_assessment_levels[] | undefined,
+  responses: Dnx_assessment_responses[] | undefined,
+): MissingRequired[] {
+  if (!levels || levels.length === 0) return [];
+  const levelsById = new Map(
+    levels.map((l) => [l.dnx_assessment_levelid, l] as const),
+  );
+  const responsesByLevelId = indexResponses(responses);
+
+  // Build parent path strings for each question via a tiny up-walk (capped to
+  // depth 8 to defend against cycles).
+  const pathOf = (level: Dnx_assessment_levels): string => {
+    const labels: string[] = [];
+    let parentId: string | undefined;
+    const rec = level as unknown as Record<string, unknown>;
+    parentId = rec._dnx_parent_assessment_level_value as string | undefined;
+    for (let i = 0; i < 8 && parentId; i++) {
+      const parent = levelsById.get(parentId);
+      if (!parent) break;
+      labels.unshift(parent.dnx_name);
+      const prec = parent as unknown as Record<string, unknown>;
+      parentId = prec._dnx_parent_assessment_level_value as string | undefined;
+    }
+    return labels.join(' › ');
+  };
+
+  const missing: MissingRequired[] = [];
+  for (const level of levels) {
+    if (level.dnx_assessment_level_type !== 3) continue;
+    if (!level.dnx_is_required) continue;
+    if (!isQuestionVisible(level, levelsById, responsesByLevelId)) continue;
+    const r = responsesByLevelId.get(level.dnx_assessment_levelid);
+    if (hasAnswer(r)) continue;
+    missing.push({
+      levelId: level.dnx_assessment_levelid,
+      label: level.dnx_name,
+      path: pathOf(level),
+    });
+  }
+  return missing;
+}
