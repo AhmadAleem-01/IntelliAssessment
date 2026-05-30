@@ -13,10 +13,17 @@ import {
   ErrorCircle16Filled,
 } from '@fluentui/react-icons';
 import { Button } from '@fluentui/react-components';
-import { SendCopy20Regular } from '@fluentui/react-icons';
+import {
+  SendCopy20Regular,
+  CheckmarkCircle16Regular,
+  DismissCircle16Regular,
+  PersonStar16Regular,
+} from '@fluentui/react-icons';
 import { useAssessmentInstance, useUpsertResponse } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
+import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
+import { RejectAssessmentDialog } from './RejectAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
 
@@ -144,6 +151,86 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 500,
     color: 'var(--color-text-primary)',
+  },
+  reviewerPanel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '14px 18px',
+    borderRadius: 'var(--border-radius-lg)',
+    backgroundColor: 'var(--color-purple-soft)',
+    border: '0.5px solid var(--color-purple)',
+    marginBottom: '14px',
+  },
+  reviewerMark: {
+    width: '32px',
+    height: '32px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-purple)',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  reviewerCopy: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  reviewerTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+  },
+  reviewerSub: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    lineHeight: 1.4,
+  },
+  reviewerActions: { display: 'flex', gap: '8px', flexShrink: 0 },
+  approveBtn: {
+    backgroundColor: 'var(--color-green) !important',
+    color: '#fff !important',
+    border: '0.5px solid var(--color-green) !important',
+    ':hover': {
+      backgroundColor: 'var(--color-green-text) !important',
+      border: '0.5px solid var(--color-green-text) !important',
+    },
+  },
+  rejectBtn: {
+    color: 'var(--color-amber-text) !important',
+    backgroundColor: 'transparent !important',
+    border: '0.5px solid var(--color-amber) !important',
+    ':hover': {
+      backgroundColor: 'var(--color-amber-soft) !important',
+    },
+  },
+  feedbackBanner: {
+    padding: '12px 16px',
+    borderRadius: 'var(--border-radius-lg)',
+    border: '0.5px solid',
+    marginBottom: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  feedbackTitle: {
+    fontSize: '11px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  feedbackBody: {
+    fontSize: '13px',
+    lineHeight: 1.45,
+    color: 'var(--color-text-primary)',
+    whiteSpace: 'pre-wrap',
   },
   saveBadge: {
     display: 'inline-flex',
@@ -358,6 +445,52 @@ export function AssessmentPage() {
         </div>
       </div>
 
+      <ReviewerFeedbackBanner assessment={assessment} statusLabel={label} />
+
+      {label === 'PendingReview' && (
+        <div className={styles.reviewerPanel}>
+          <div className={styles.reviewerMark}>
+            <PersonStar16Regular />
+          </div>
+          <div className={styles.reviewerCopy}>
+            <span className={styles.reviewerTitle}>Reviewer actions</span>
+            <span className={styles.reviewerSub}>
+              {assessment.dnx_submittedon
+                ? `Submitted on ${new Date(assessment.dnx_submittedon).toLocaleDateString()}. `
+                : ''}
+              Approve to finalise the outcome, or send back to the assessor with notes.
+            </span>
+          </div>
+          <div className={styles.reviewerActions}>
+            <RejectAssessmentDialog
+              instanceId={assessment.dnx_assessment_instanceid}
+              templateId={templateId ?? ''}
+              trigger={
+                <Button
+                  className={styles.rejectBtn}
+                  appearance="secondary"
+                  icon={<DismissCircle16Regular />}
+                >
+                  Send back
+                </Button>
+              }
+            />
+            <ApproveAssessmentDialog
+              instanceId={assessment.dnx_assessment_instanceid}
+              trigger={
+                <Button
+                  className={styles.approveBtn}
+                  appearance="primary"
+                  icon={<CheckmarkCircle16Regular />}
+                >
+                  Approve
+                </Button>
+              }
+            />
+          </div>
+        </div>
+      )}
+
       {templateId ? (
         <ChecklistRenderer
           instanceId={assessment.dnx_assessment_instanceid}
@@ -374,6 +507,65 @@ export function AssessmentPage() {
           set one before answering.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Reviewer feedback banner — shown whenever `dnx_outcome_notes` is set.
+ *
+ * Three color variants by (status, outcome):
+ *   - Complete + Suitable    → green   "Approved"
+ *   - Complete + NotSuitable → red     "Marked not suitable"
+ *   - InProgress + notes     → amber   "Sent back by reviewer"
+ *
+ * Persists across reopen cycles so the assessor always sees what the
+ * reviewer said while they're fixing things up.
+ */
+function ReviewerFeedbackBanner({
+  assessment,
+  statusLabel,
+}: {
+  assessment: import('../../generated/models/Dnx_assessment_instancesModel').Dnx_assessment_instances;
+  statusLabel: string;
+}) {
+  const styles = useStyles();
+  const notes = assessment.dnx_outcome_notes?.trim();
+  if (!notes) return null;
+
+  const outcome = assessment.dnx_outcome;
+  let title = 'Reviewer feedback';
+  let bg = 'var(--color-amber-soft)';
+  let borderColor = 'var(--color-amber)';
+  let titleColor = 'var(--color-amber-text)';
+
+  if (statusLabel === 'Complete' && outcome === 0) {
+    title = 'Approved — suitable';
+    bg = 'var(--color-green-soft)';
+    borderColor = 'var(--color-green)';
+    titleColor = 'var(--color-green-text)';
+  } else if (statusLabel === 'Complete' && outcome === 1) {
+    title = 'Reviewed — not suitable';
+    bg = 'var(--color-red-soft)';
+    borderColor = 'var(--color-red)';
+    titleColor = 'var(--color-red-text)';
+  } else if (statusLabel === 'InProgress' || statusLabel === 'Draft') {
+    title = 'Sent back by reviewer';
+  } else {
+    // PendingReview shouldn't have notes yet (reviewer hasn't acted).
+    // If something else odd, fall through with the default amber.
+    return null;
+  }
+
+  return (
+    <div
+      className={styles.feedbackBanner}
+      style={{ backgroundColor: bg, borderColor }}
+    >
+      <span className={styles.feedbackTitle} style={{ color: titleColor }}>
+        {title}
+      </span>
+      <div className={styles.feedbackBody}>{notes}</div>
     </div>
   );
 }

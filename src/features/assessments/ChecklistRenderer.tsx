@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Spinner,
   MessageBar,
@@ -11,17 +11,22 @@ import {
   ChevronRight16Regular,
   LockClosed16Regular,
   Open16Regular,
+  Flag16Filled,
 } from '@fluentui/react-icons';
 import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
+import type { Dnx_reviewer_comments } from '../../generated/models/Dnx_reviewer_commentsModel';
 import type { DataType, LevelType } from '../templates/levels/levelTypes';
 import {
   useAssessmentResponses,
   useReopenAssessment,
+  useReviewerComments,
+  useResolveReviewerComment,
   type useUpsertResponse,
 } from './api';
 import { indexResponses, isQuestionVisible, hasAnswer } from './responseHelpers';
+import { lookupId } from '../../lib/dataverse';
 import { QuestionRow } from './QuestionRow';
 
 const useStyles = makeStyles({
@@ -50,6 +55,39 @@ const useStyles = makeStyles({
   lockIcon: { flexShrink: 0, display: 'flex', alignItems: 'center' },
   lockText: { flex: 1, fontSize: '12px', lineHeight: 1.4 },
   lockTitle: { fontWeight: 500, color: 'var(--color-text-primary)' },
+  flagsBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    borderRadius: 'var(--border-radius-lg)',
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
+    border: '0.5px solid var(--color-amber)',
+    marginBottom: '8px',
+  },
+  flagsCount: {
+    flex: 1,
+    fontSize: '13px',
+    fontWeight: 500,
+    color: 'var(--color-text-primary)',
+    lineHeight: 1.3,
+  },
+  flagsSub: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    marginTop: '2px',
+  },
+  flagsCounter: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--color-amber-text)',
+    backgroundColor: 'var(--color-background-primary)',
+    padding: '4px 10px',
+    borderRadius: 'var(--border-radius-md)',
+    border: '0.5px solid var(--color-amber)',
+    flexShrink: 0,
+  },
   section: {
     backgroundColor: 'var(--color-background-primary)',
     border: '0.5px solid var(--color-border-tertiary)',
@@ -193,6 +231,58 @@ export function ChecklistRenderer({
 }: Props) {
   const styles = useStyles();
   const reopen = useReopenAssessment(instanceId);
+  const { data: comments } = useReviewerComments(instanceId);
+  const resolveFlag = useResolveReviewerComment(instanceId);
+
+  // Group unresolved flags by the level GUID they target — passed down to each
+  // QuestionRow so it can render its own indicators.
+  const flagsByLevelId = useMemo(() => {
+    const map = new Map<string, Dnx_reviewer_comments[]>();
+    for (const c of comments ?? []) {
+      if (c.dnx_is_resolved) continue;
+      const levelId = lookupId(c, 'dnx_assessment_level');
+      if (!levelId) continue;
+      const list = map.get(levelId);
+      if (list) list.push(c);
+      else map.set(levelId, [c]);
+    }
+    return map;
+  }, [comments]);
+
+  // One ref per flagged question so the "Jump to next flag" button can
+  // scrollIntoView. Map keyed by levelId — refs live for the lifetime of the
+  // renderer mount so we don't need to clear them between renders.
+  const rowRefs = useRef(new Map<string, HTMLDivElement | null>());
+
+  // Which flag the cycle is currently on. 1-based for display; we advance
+  // before scrolling so the first click lands on flag 1 of N.
+  const [currentFlagIdx, setCurrentFlagIdx] = useState(0);
+
+  function getOrderedFlagElements(): HTMLDivElement[] {
+    // Sort registered refs by DOM order so "next" follows the visible layout,
+    // not comment-creation order from the API.
+    const els: HTMLDivElement[] = [];
+    for (const el of rowRefs.current.values()) {
+      if (el) els.push(el);
+    }
+    els.sort((a, b) => {
+      const pos = a.compareDocumentPosition(b);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
+    return els;
+  }
+
+  function jumpToNextFlag() {
+    const els = getOrderedFlagElements();
+    if (els.length === 0) return;
+    const next = currentFlagIdx % els.length;
+    els[next].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setCurrentFlagIdx(next + 1);
+  }
+
+  const totalFlaggedQuestions = flagsByLevelId.size;
   const {
     data: levels,
     isLoading: levelsLoading,
@@ -240,6 +330,28 @@ export function ChecklistRenderer({
 
   return (
     <div className={styles.root}>
+      {totalFlaggedQuestions > 0 && (
+        <div className={styles.flagsBanner}>
+          <span className={styles.lockIcon}>
+            <Flag16Filled />
+          </span>
+          <div className={styles.flagsCount}>
+            {totalFlaggedQuestions} question{totalFlaggedQuestions === 1 ? '' : 's'} flagged by the reviewer
+            <div className={styles.flagsSub}>
+              Jump to each flag and address the reviewer's notes. Mark each as resolved
+              when fixed.
+            </div>
+          </div>
+          {currentFlagIdx > 0 && (
+            <span className={styles.flagsCounter}>
+              {currentFlagIdx} of {totalFlaggedQuestions}
+            </span>
+          )}
+          <Button appearance="secondary" onClick={jumpToNextFlag}>
+            {currentFlagIdx === 0 ? 'Jump to first flag' : 'Next flag'}
+          </Button>
+        </div>
+      )}
       {readOnly && (
         <div
           className={`${styles.lockBanner} ${pendingReview ? '' : styles.lockBannerLocked}`}
@@ -292,6 +404,8 @@ export function ChecklistRenderer({
           node={sectionNode}
           levelsById={levelsById}
           responsesByLevelId={responsesByLevelId}
+          flagsByLevelId={flagsByLevelId}
+          rowRefs={rowRefs.current}
           onAnswer={(level, value) =>
             upsert.mutate({
               instanceId,
@@ -301,6 +415,8 @@ export function ChecklistRenderer({
               value,
             })
           }
+          onResolveFlag={(commentId) => resolveFlag.mutate(commentId)}
+          resolvingFlagId={resolveFlag.isPending ? resolveFlag.variables ?? null : null}
           disabled={readOnly || upsert.isPending}
         />
       ))}
@@ -312,7 +428,11 @@ interface SectionBlockProps {
   node: LevelNode;
   levelsById: Map<string, Dnx_assessment_levels>;
   responsesByLevelId: ReturnType<typeof indexResponses>;
+  flagsByLevelId: Map<string, Dnx_reviewer_comments[]>;
+  rowRefs: Map<string, HTMLDivElement | null>;
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
+  onResolveFlag: (commentId: string) => void;
+  resolvingFlagId: string | null;
   disabled: boolean;
 }
 
@@ -320,7 +440,11 @@ function SectionBlock({
   node,
   levelsById,
   responsesByLevelId,
+  flagsByLevelId,
+  rowRefs,
   onAnswer,
+  onResolveFlag,
+  resolvingFlagId,
   disabled,
 }: SectionBlockProps) {
   const styles = useStyles();
@@ -366,7 +490,11 @@ function SectionBlock({
               level={q.level}
               levelsById={levelsById}
               responsesByLevelId={responsesByLevelId}
+              flagsByLevelId={flagsByLevelId}
+              rowRefs={rowRefs}
               onAnswer={onAnswer}
+              onResolveFlag={onResolveFlag}
+              resolvingFlagId={resolvingFlagId}
               disabled={disabled}
             />
           ))}
@@ -376,7 +504,11 @@ function SectionBlock({
               node={sub}
               levelsById={levelsById}
               responsesByLevelId={responsesByLevelId}
+              flagsByLevelId={flagsByLevelId}
+              rowRefs={rowRefs}
               onAnswer={onAnswer}
+              onResolveFlag={onResolveFlag}
+              resolvingFlagId={resolvingFlagId}
               disabled={disabled}
             />
           ))}
@@ -392,7 +524,11 @@ function SubsectionBlock({
   node,
   levelsById,
   responsesByLevelId,
+  flagsByLevelId,
+  rowRefs,
   onAnswer,
+  onResolveFlag,
+  resolvingFlagId,
   disabled,
 }: SubsectionBlockProps) {
   const styles = useStyles();
@@ -446,7 +582,11 @@ function SubsectionBlock({
                   level={q.level}
                   levelsById={levelsById}
                   responsesByLevelId={responsesByLevelId}
+                  flagsByLevelId={flagsByLevelId}
+                  rowRefs={rowRefs}
                   onAnswer={onAnswer}
+                  onResolveFlag={onResolveFlag}
+                  resolvingFlagId={resolvingFlagId}
                   disabled={disabled}
                 />
               ))}
@@ -461,7 +601,11 @@ interface QuestionItemProps {
   level: Dnx_assessment_levels;
   levelsById: Map<string, Dnx_assessment_levels>;
   responsesByLevelId: ReturnType<typeof indexResponses>;
+  flagsByLevelId: Map<string, Dnx_reviewer_comments[]>;
+  rowRefs: Map<string, HTMLDivElement | null>;
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
+  onResolveFlag: (commentId: string) => void;
+  resolvingFlagId: string | null;
   disabled: boolean;
 }
 
@@ -469,7 +613,11 @@ function QuestionItem({
   level,
   levelsById,
   responsesByLevelId,
+  flagsByLevelId,
+  rowRefs,
   onAnswer,
+  onResolveFlag,
+  resolvingFlagId,
   disabled,
 }: QuestionItemProps) {
   // Visibility gate — keep the QuestionRow mounted but animate it in/out.
@@ -477,16 +625,27 @@ function QuestionItem({
   // pointer-events is disabled during fade so half-hidden inputs are inert.
   const visible = isQuestionVisible(level, levelsById, responsesByLevelId);
   const response = responsesByLevelId.get(level.dnx_assessment_levelid);
+  const levelId = level.dnx_assessment_levelid;
+  const flags = flagsByLevelId.get(levelId);
   return (
     <div
       className={`reveal ${visible ? 'reveal-show' : 'reveal-hide'}`}
       aria-hidden={!visible}
     >
       <QuestionRow
+        ref={(el) => {
+          // Only register refs for flagged rows — keeps the map small and the
+          // jump-to-first-flag lookup direct.
+          if (flags && flags.length > 0) rowRefs.set(levelId, el);
+          else rowRefs.delete(levelId);
+        }}
         level={level}
         response={response}
         onChange={(value) => onAnswer(level, value)}
         disabled={disabled}
+        flags={flags}
+        onResolveFlag={onResolveFlag}
+        resolvingFlagId={resolvingFlagId}
       />
     </div>
   );

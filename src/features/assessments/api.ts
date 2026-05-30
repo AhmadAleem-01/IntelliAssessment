@@ -4,6 +4,7 @@ import {
   Dnx_assessment_instancesService,
   Dnx_assessment_responsesService,
   Dnx_assessment_versionsService,
+  Dnx_reviewer_commentsService,
 } from '../../generated';
 import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import type {
@@ -15,6 +16,10 @@ import type {
   Dnx_assessment_responsesBase,
 } from '../../generated/models/Dnx_assessment_responsesModel';
 import type { Dnx_assessment_versionsBase } from '../../generated/models/Dnx_assessment_versionsModel';
+import type {
+  Dnx_reviewer_comments,
+  Dnx_reviewer_commentsBase,
+} from '../../generated/models/Dnx_reviewer_commentsModel';
 import type { DataType } from '../templates/levels/levelTypes';
 import { lookupId } from '../../lib/dataverse';
 
@@ -25,6 +30,8 @@ export const assessmentKeys = {
   detail: (id: string) => [...assessmentKeys.all, 'detail', id] as const,
   responses: (instanceId: string) =>
     [...assessmentKeys.all, 'responses', instanceId] as const,
+  comments: (instanceId: string) =>
+    [...assessmentKeys.all, 'comments', instanceId] as const,
 };
 
 export interface CreateAssessmentInput {
@@ -319,11 +326,18 @@ async function bumpInstanceVersion(
  * lag by one save. Acceptable for audit purposes — the final snapshot at
  * submission time is the authoritative one.
  */
+export type SnapshotReason =
+  | 'Autosave'
+  | 'Submitted'
+  | 'Reopened'
+  | 'Approved'
+  | 'Rejected';
+
 async function snapshotAssessment(
   qc: ReturnType<typeof useQueryClient>,
   instanceId: string,
   versionNumber: number,
-  changeReason: 'Autosave' | 'Submitted' | 'Reopened',
+  changeReason: SnapshotReason,
 ): Promise<void> {
   try {
     const instance = qc.getQueryData<Dnx_assessment_instances>(
@@ -486,6 +500,203 @@ export function useReopenAssessment(instanceId: string) {
       // Snapshot the reopen event so the audit log records who pulled the
       // submission back and at what version.
       void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Reopened');
+    },
+  });
+}
+
+/**
+ * Reviewer action: approve a PendingReview assessment with a final outcome.
+ *
+ * Sets statuscode → Complete (778540004), assigns the chosen outcome
+ * (0 Suitable / 1 NotSuitable), persists the reviewer's notes into
+ * `dnx_outcome_notes`, and bumps version. A snapshot with reason "Approved"
+ * captures the moment so a downstream audit view can show the reviewer's
+ * sign-off state.
+ *
+ * Caller should confirm via dialog before invoking.
+ *
+ * NOTE: This action is currently visible to any signed-in user. Role-gating
+ * (Reviewer / Admin only) is a follow-up — server-side enforcement via
+ * Dataverse security roles is the real barrier.
+ */
+export function useApproveAssessment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      /** 0 = Suitable, 1 = NotSuitable */
+      outcome: 0 | 1;
+      notes?: string;
+    }): Promise<Dnx_assessment_instances> => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      const nextVersion = (cached?.dnx_version ?? 0) + 1;
+      const changes = {
+        statuscode: 778540004, // Complete
+        dnx_outcome: input.outcome,
+        dnx_outcome_notes: input.notes?.trim() || undefined,
+        dnx_version: nextVersion,
+      };
+      const r = await Dnx_assessment_instancesService.update(
+        instanceId,
+        changes as unknown as Partial<Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>>,
+      );
+      if (!r.success || !r.data) {
+        console.error('[approve assessment] failed', r.error, changes);
+        throw new Error(r.error?.message ?? 'Failed to approve');
+      }
+      return r.data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(assessmentKeys.detail(instanceId), data);
+      qc.invalidateQueries({ queryKey: assessmentKeys.list() });
+      const projectId = (data as unknown as Record<string, unknown>)
+        ._dnx_project_value as string | undefined;
+      if (projectId) {
+        qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
+      }
+      void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Approved');
+    },
+  });
+}
+
+/**
+ * Reviewer action: reject a PendingReview assessment with required notes.
+ *
+ * Sets statuscode → InProgress (778540002) so the assessor can pick it back
+ * up; outcome stays Pending (no final determination has been made). The
+ * rejection notes go into `dnx_outcome_notes` — the assessor sees these on
+ * the instance page so they know what to fix. Bumps version and snapshots
+ * with reason "Rejected".
+ *
+ * Notes are required at the call site (the dialog enforces it) so this
+ * mutation does NOT validate — caller's responsibility.
+ */
+export function useRejectAssessment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { notes: string }): Promise<Dnx_assessment_instances> => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      const nextVersion = (cached?.dnx_version ?? 0) + 1;
+      const changes = {
+        statuscode: 778540002, // InProgress
+        dnx_outcome_notes: input.notes.trim(),
+        dnx_version: nextVersion,
+      };
+      const r = await Dnx_assessment_instancesService.update(
+        instanceId,
+        changes as unknown as Partial<Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>>,
+      );
+      if (!r.success || !r.data) {
+        console.error('[reject assessment] failed', r.error, changes);
+        throw new Error(r.error?.message ?? 'Failed to reject');
+      }
+      return r.data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(assessmentKeys.detail(instanceId), data);
+      qc.invalidateQueries({ queryKey: assessmentKeys.list() });
+      const projectId = (data as unknown as Record<string, unknown>)
+        ._dnx_project_value as string | undefined;
+      if (projectId) {
+        qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
+      }
+      void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Rejected');
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reviewer comments (per-level flags attached to an assessment instance)     */
+/* -------------------------------------------------------------------------- */
+
+/** All reviewer comments attached to this instance, oldest first. */
+export function useReviewerComments(instanceId: string | undefined) {
+  return useQuery({
+    queryKey: assessmentKeys.comments(instanceId ?? ''),
+    enabled: !!instanceId,
+    queryFn: async (): Promise<Dnx_reviewer_comments[]> => {
+      const r = await Dnx_reviewer_commentsService.getAll({
+        filter: `_dnx_assessment_value eq ${instanceId}`,
+        orderBy: ['createdon asc'],
+        top: 500,
+      });
+      if (!r.success) throw new Error(r.error?.message ?? 'Failed to load comments');
+      return r.data ?? [];
+    },
+  });
+}
+
+/** Mark a single flag as resolved (assessor has addressed it). */
+export function useResolveReviewerComment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (commentId: string): Promise<void> => {
+      const r = await Dnx_reviewer_commentsService.update(commentId, {
+        dnx_is_resolved: true,
+      } as unknown as Partial<Omit<Dnx_reviewer_commentsBase, 'dnx_reviewer_commentid'>>);
+      if (!r.success) {
+        throw new Error(r.error?.message ?? 'Failed to mark resolved');
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
+    },
+  });
+}
+
+/** Delete a single reviewer flag (cleanup before re-submitting, etc.). */
+export function useDeleteReviewerComment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (commentId: string): Promise<void> => {
+      await Dnx_reviewer_commentsService.delete(commentId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
+    },
+  });
+}
+
+/**
+ * Create one reviewer-comment row per flagged level in a single fire.
+ *
+ * Used by the Reject dialog so the reviewer can pinpoint which questions
+ * need fixing in the same submit. All creates fire in parallel because they
+ * don't depend on each other; if any individual row create fails its error
+ * is collected and the rest still go through.
+ */
+export function useCreateReviewerComments(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      flags: Array<{ levelId: string; levelName: string; commentText: string }>,
+    ): Promise<void> => {
+      if (flags.length === 0) return;
+      const results = await Promise.allSettled(
+        flags.map((f) =>
+          Dnx_reviewer_commentsService.create({
+            dnx_name: f.levelName.slice(0, 100), // primary name; clamp to safe length
+            dnx_comment_text: f.commentText,
+            dnx_is_resolved: false,
+            'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+            'dnx_Assessment_Level@odata.bind': `/dnx_assessment_levels(${f.levelId})`,
+            statecode: 0,
+            statuscode: 1,
+          } as unknown as Omit<Dnx_reviewer_commentsBase, 'dnx_reviewer_commentid'>),
+        ),
+      );
+      const failures = results.filter((r) => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.warn('[create flags] some failed', failures);
+        // Throw the first error so the dialog surfaces something to the user.
+        throw (failures[0] as PromiseRejectedResult).reason;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
     },
   });
 }

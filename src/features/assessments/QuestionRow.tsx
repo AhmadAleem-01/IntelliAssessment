@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { makeStyles } from '@fluentui/react-components';
+import { Flag16Regular, CheckmarkCircle16Regular } from '@fluentui/react-icons';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { Dnx_assessment_responses } from '../../generated/models/Dnx_assessment_responsesModel';
+import type { Dnx_reviewer_comments } from '../../generated/models/Dnx_reviewer_commentsModel';
 import { parseOptions } from '../templates/levels/options';
 import type { DataType } from '../templates/levels/levelTypes';
 import { readResponseValue } from './responseHelpers';
@@ -49,6 +51,72 @@ const useStyles = makeStyles({
     color: 'var(--color-text-secondary)',
     lineHeight: 1.4,
   },
+  flagged: {
+    paddingLeft: '10px',
+    boxShadow: 'inset 3px 0 0 0 var(--color-amber)',
+  },
+  flagBlock: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 12px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-amber-soft)',
+    border: '0.5px solid var(--color-amber)',
+    marginTop: '4px',
+    marginBottom: '4px',
+  },
+  flagBlockBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: 1,
+    minWidth: 0,
+  },
+  flagTitle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    fontSize: '10px',
+    fontWeight: 600,
+    color: 'var(--color-amber-text)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  flagText: {
+    fontSize: '12px',
+    color: 'var(--color-text-primary)',
+    lineHeight: 1.4,
+    whiteSpace: 'pre-wrap',
+  },
+  flagResolve: {
+    backgroundColor: 'var(--color-green)',
+    border: '0.5px solid var(--color-green)',
+    cursor: 'pointer',
+    padding: '6px 12px',
+    borderRadius: 'var(--border-radius-md)',
+    fontSize: '12px',
+    fontWeight: 600,
+    lineHeight: 1,
+    color: '#ffffff',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    height: '28px',
+    transition: 'background-color 0.1s ease, transform 0.05s ease',
+    ':hover': {
+      backgroundColor: 'var(--color-green-text)',
+    },
+    ':active': {
+      transform: 'translateY(1px)',
+    },
+    ':disabled': {
+      opacity: 0.6,
+      cursor: 'not-allowed',
+    },
+  },
 });
 
 interface Props {
@@ -56,9 +124,16 @@ interface Props {
   response: Dnx_assessment_responses | undefined;
   onChange: (value: boolean | string | string[] | null) => void;
   disabled?: boolean;
+  /** Unresolved reviewer flags targeting this question. */
+  flags?: Dnx_reviewer_comments[];
+  onResolveFlag?: (commentId: string) => void;
+  resolvingFlagId?: string | null;
 }
 
-export function QuestionRow({ level, response, onChange, disabled }: Props) {
+export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRow(
+  { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId },
+  ref,
+) {
   const styles = useStyles();
   const dataType = (level.dnx_data_type ?? 3) as DataType;
   const persisted = readResponseValue(dataType, response);
@@ -115,8 +190,10 @@ export function QuestionRow({ level, response, onChange, disabled }: Props) {
     }, TEXT_DEBOUNCE_MS);
   }
 
+  const hasFlags = (flags?.length ?? 0) > 0;
+
   return (
-    <div className={styles.row}>
+    <div ref={ref} className={`${styles.row} ${hasFlags ? styles.flagged : ''}`}>
       <div className={styles.labelRow}>
         <span className={styles.label}>
           {level.dnx_name}
@@ -127,6 +204,33 @@ export function QuestionRow({ level, response, onChange, disabled }: Props) {
         )}
       </div>
       {level.dnx_hint_text && <div className={styles.hint}>{level.dnx_hint_text}</div>}
+      {hasFlags &&
+        flags!.map((flag) => (
+          <div key={flag.dnx_reviewer_commentid} className={styles.flagBlock}>
+            <div className={styles.flagBlockBody}>
+              <span className={styles.flagTitle}>
+                <Flag16Regular />
+                Reviewer flag
+              </span>
+              {flag.dnx_comment_text && (
+                <div className={styles.flagText}>{flag.dnx_comment_text}</div>
+              )}
+            </div>
+            {onResolveFlag && (
+              <button
+                type="button"
+                className={styles.flagResolve}
+                disabled={resolvingFlagId === flag.dnx_reviewer_commentid}
+                onClick={() => onResolveFlag(flag.dnx_reviewer_commentid)}
+              >
+                <CheckmarkCircle16Regular />
+                {resolvingFlagId === flag.dnx_reviewer_commentid
+                  ? 'Resolving...'
+                  : 'Mark resolved'}
+              </button>
+            )}
+          </div>
+        ))}
       {renderField()}
     </div>
   );
@@ -178,4 +282,4 @@ export function QuestionRow({ level, response, onChange, disabled }: Props) {
         );
     }
   }
-}
+});
