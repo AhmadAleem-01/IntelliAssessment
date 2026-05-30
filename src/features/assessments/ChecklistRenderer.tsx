@@ -97,20 +97,63 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   subsection: {
-    borderTop: '0.5px solid var(--color-border-tertiary)',
-    paddingTop: '12px',
-    marginTop: '6px',
+    border: '0.5px solid var(--color-border-secondary)',
+    borderRadius: 'var(--border-radius-md)',
+    marginTop: '14px',
+    marginBottom: '4px',
+    overflow: 'hidden',
+    backgroundColor: 'var(--color-background-primary)',
   },
   subsectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--color-background-tertiary)',
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    cursor: 'pointer',
+    userSelect: 'none',
+    transition: 'background-color 0.1s ease',
+    ':hover': {
+      backgroundColor: 'var(--color-background-secondary)',
+    },
+  },
+  subsectionHeaderCollapsed: {
+    borderBottom: 'none',
+  },
+  subsectionBullet: {
+    display: 'inline-block',
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-purple)',
+    flexShrink: 0,
+  },
+  subsectionTitle: {
     fontSize: '13px',
     fontWeight: 500,
     color: 'var(--color-text-primary)',
-    marginBottom: '4px',
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  subsectionLabel: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: 'var(--color-text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    flexShrink: 0,
   },
   subsectionDesc: {
     fontSize: '11px',
     color: 'var(--color-text-secondary)',
-    marginBottom: '8px',
+    padding: '8px 14px 0 14px',
+  },
+  subsectionBody: {
+    padding: '4px 14px 10px 14px',
   },
   empty: {
     padding: '40px 20px',
@@ -353,24 +396,63 @@ function SubsectionBlock({
   disabled,
 }: SubsectionBlockProps) {
   const styles = useStyles();
+  const [expanded, setExpanded] = useState(true);
+  // Per-subsection counts so a long section is easier to scan.
+  const counts = countVisibleAnswered(node, levelsById, responsesByLevelId);
   return (
     <div className={styles.subsection}>
-      <div className={styles.subsectionHeader}>{node.level.dnx_name}</div>
-      {node.level.dnx_description && (
-        <div className={styles.subsectionDesc}>{node.level.dnx_description}</div>
+      <div
+        className={`${styles.subsectionHeader} ${expanded ? '' : styles.subsectionHeaderCollapsed}`}
+        onClick={() => setExpanded((v) => !v)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
+        aria-expanded={expanded}
+      >
+        <button
+          type="button"
+          className={styles.chevronBtn}
+          aria-label={expanded ? 'Collapse subsection' : 'Expand subsection'}
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+        >
+          {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+        </button>
+        <span className={styles.subsectionBullet} aria-hidden />
+        <span className={styles.subsectionLabel}>Subsection</span>
+        <span className={styles.subsectionTitle}>{node.level.dnx_name}</span>
+        <span className={styles.subsectionLabel}>
+          {counts.answered}/{counts.visible}
+        </span>
+      </div>
+      {expanded && (
+        <>
+          {node.level.dnx_description && (
+            <div className={styles.subsectionDesc}>{node.level.dnx_description}</div>
+          )}
+          <div className={styles.subsectionBody}>
+            {node.children
+              .filter((c) => (c.level.dnx_assessment_level_type as LevelType) === 3)
+              .map((q) => (
+                <QuestionItem
+                  key={q.level.dnx_assessment_levelid}
+                  level={q.level}
+                  levelsById={levelsById}
+                  responsesByLevelId={responsesByLevelId}
+                  onAnswer={onAnswer}
+                  disabled={disabled}
+                />
+              ))}
+          </div>
+        </>
       )}
-      {node.children
-        .filter((c) => (c.level.dnx_assessment_level_type as LevelType) === 3)
-        .map((q) => (
-          <QuestionItem
-            key={q.level.dnx_assessment_levelid}
-            level={q.level}
-            levelsById={levelsById}
-            responsesByLevelId={responsesByLevelId}
-            onAnswer={onAnswer}
-            disabled={disabled}
-          />
-        ))}
     </div>
   );
 }
