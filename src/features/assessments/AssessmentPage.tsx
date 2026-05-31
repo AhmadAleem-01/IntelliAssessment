@@ -27,6 +27,8 @@ import { RejectAssessmentDialog } from './RejectAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
 import { Tooltip } from '@fluentui/react-components';
+import { DocumentText20Regular } from '@fluentui/react-icons';
+import { LetterDialog } from '../letter/LetterDialog';
 import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree } from '../templates/levels/treeBuilder';
 import { useCriteriaForLevels } from '../rules/api';
@@ -414,22 +416,30 @@ export function AssessmentPage() {
             </div>
           </div>
         </div>
-        {/* Submit button only when the assessor is still actively editing.
-            On PendingReview / Complete the inline banner inside the checklist
-            handles the locked-state copy + Reopen action — no need to duplicate
-            actions in the hero. */}
-        {templateId && label !== 'PendingReview' && label !== 'Complete' && (
+        {/* Hero actions — Submit only while editable; the outcome letter is
+            always available so reviewers can preview / print at any point. */}
+        {templateId && (
           <div className={styles.headerActions}>
-            <SubmitAssessmentDialog
-              instanceId={assessment.dnx_assessment_instanceid}
-              templateId={templateId}
-              alreadySubmitted={false}
+            <LetterDialog
+              assessment={assessment}
               trigger={
-                <Button appearance="primary" icon={<SendCopy20Regular />}>
-                  Submit for review
+                <Button appearance="secondary" icon={<DocumentText20Regular />}>
+                  View letter
                 </Button>
               }
             />
+            {label !== 'PendingReview' && label !== 'Complete' && (
+              <SubmitAssessmentDialog
+                instanceId={assessment.dnx_assessment_instanceid}
+                templateId={templateId}
+                alreadySubmitted={false}
+                trigger={
+                  <Button appearance="primary" icon={<SendCopy20Regular />}>
+                    Submit for review
+                  </Button>
+                }
+              />
+            )}
           </div>
         )}
       </div>
