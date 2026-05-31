@@ -21,6 +21,8 @@ import {
 } from '@fluentui/react-icons';
 import { useAssessmentInstance, useUpsertResponse, useAssessmentResponses } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
+import { CommentsDrawer, useGeneralCommentCount } from './CommentsDrawer';
+import { Comment20Regular } from '@fluentui/react-icons';
 import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
 import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
 import { RejectAssessmentDialog } from './RejectAssessmentDialog';
@@ -333,6 +335,8 @@ export function AssessmentPage() {
   // mutation's status. ChecklistRenderer gets the mutation via prop.
   const upsert = useUpsertResponse(assessmentId ?? '');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const generalCommentCount = useGeneralCommentCount(assessmentId);
   useEffect(() => {
     if (upsert.isSuccess && upsert.data) {
       setLastSavedAt(new Date());
@@ -420,6 +424,13 @@ export function AssessmentPage() {
             always available so reviewers can preview / print at any point. */}
         {templateId && (
           <div className={styles.headerActions}>
+            <Button
+              appearance="secondary"
+              icon={<Comment20Regular />}
+              onClick={() => setCommentsOpen(true)}
+            >
+              Comments{generalCommentCount > 0 ? ` (${generalCommentCount})` : ''}
+            </Button>
             <LetterDialog
               assessment={assessment}
               trigger={
@@ -443,6 +454,13 @@ export function AssessmentPage() {
           </div>
         )}
       </div>
+
+      <CommentsDrawer
+        instanceId={assessment.dnx_assessment_instanceid}
+        templateId={templateId ?? undefined}
+        open={commentsOpen}
+        onOpenChange={setCommentsOpen}
+      />
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>Overview</div>
@@ -569,6 +587,7 @@ export function AssessmentPage() {
           set one before answering.
         </div>
       )}
+
     </div>
   );
 }

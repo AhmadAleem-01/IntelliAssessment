@@ -690,6 +690,64 @@ export function useDeleteReviewerComment(instanceId: string) {
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* General comments (instance-scoped, not tied to a question)                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Add a comment to an assessment instance — either a new thread (parentId
+ * omitted) or a reply (parentId points to an existing comment). General
+ * comments are distinguished from per-question reviewer flags by NOT
+ * binding `dnx_Assessment_Level`. The flag-render path filters by the
+ * presence of a level lookup; this hook deliberately leaves it null.
+ */
+export function useAddComment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      text: string;
+      parentCommentId?: string;
+    }): Promise<void> => {
+      const body: Record<string, unknown> = {
+        // Primary name field — clamp the comment text into it so the row has
+        // something searchable in the maker portal. Real text lives in
+        // `dnx_comment_text`.
+        dnx_name: input.text.slice(0, 100),
+        dnx_comment_text: input.text,
+        dnx_is_resolved: false,
+        'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+        statecode: 0,
+        statuscode: 1,
+      };
+      if (input.parentCommentId) {
+        body['dnx_Parent_Comment@odata.bind'] = `/dnx_reviewer_comments(${input.parentCommentId})`;
+      }
+      const r = await Dnx_reviewer_commentsService.create(
+        body as unknown as Omit<Dnx_reviewer_commentsBase, 'dnx_reviewer_commentid'>,
+      );
+      if (!r.success) {
+        throw new Error(r.error?.message ?? 'Failed to add comment');
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
+    },
+  });
+}
+
+/** Delete a general comment. Caller is responsible for cascading replies. */
+export function useDeleteComment(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (commentId: string): Promise<void> => {
+      await Dnx_reviewer_commentsService.delete(commentId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
+    },
+  });
+}
+
 /**
  * Create one reviewer-comment row per flagged level in a single fire.
  *

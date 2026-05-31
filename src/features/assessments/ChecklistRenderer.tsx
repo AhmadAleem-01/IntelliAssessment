@@ -742,6 +742,7 @@ function QuestionItem({
   const criteria = criteriaByLevelId?.get(levelId);
   return (
     <div
+      id={`level-${levelId}`}
       className={`reveal ${visible ? 'reveal-show' : 'reveal-hide'}`}
       aria-hidden={!visible}
     >
