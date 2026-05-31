@@ -7,6 +7,7 @@ import { TemplateEditorPage } from './features/templates/TemplateEditorPage';
 import { AssessmentPage } from './features/assessments/AssessmentPage';
 import { AssessmentsListPage } from './features/assessments/AssessmentsListPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { SeedDemoPage } from './features/admin/SeedDemoPage';
 
 function App() {
   return (
@@ -20,6 +21,8 @@ function App() {
         <Route path="/templates/:templateId/edit" element={<TemplateEditorPage />} />
         <Route path="/assessments" element={<AssessmentsListPage />} />
         <Route path="/assessments/:assessmentId" element={<AssessmentPage />} />
+        {/* Admin / demo seeding — not linked from the nav, accessed by URL only. */}
+        <Route path="/admin/seed" element={<SeedDemoPage />} />
       </Route>
     </Routes>
   );

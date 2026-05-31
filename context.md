@@ -1,6 +1,6 @@
 # IntelliAssessment V1 — Project Context
 
-> Read this first when returning to the project. Last updated: 2026-05-31 (M8c.3 version history + diff dialog + tag-jump auto-expand shipped — M8 functionally complete for current scope).
+> Read this first when returning to the project. Last updated: 2026-05-31 (demo seeder + walkthrough guide added — M8 functionally complete for current scope).
 
 ## What this is
 
@@ -9,6 +9,11 @@ A Power Apps **Code App** (React + TypeScript) embedded in a Model-Driven App, b
 The detailed product spec lives in two places:
 - **PRD** — the original PDF the user attached on 2026-05-23 (also summarised in the personal plan file outside the repo).
 - **`design.md`** at the repo root — the UI design specification we're now matching. Flat aesthetic, 0.5 px borders, no shadows, no gradients, purple (`#7F77DD`) brand.
+
+## Demo & walkthrough
+
+- **`/admin/seed`** route (not linked from the nav, URL-only) renders a one-click seeder that builds a coherent demo dataset: one Project, one rich Template exercising every rule mode + per-question Importance + `include_in_letter` flags, and three Assessments at varied states (Draft, InProgress with reviewer flag + comment threads, Complete + Suitable). See `src/features/admin/seedDemo.ts`.
+- **`demo-guide.md`** at the repo root — click-by-click walkthrough through every feature in ~10–15 minutes. Cleanup steps at the bottom.
 
 ## Where we are right now
 
