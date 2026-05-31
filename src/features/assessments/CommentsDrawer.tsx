@@ -289,14 +289,24 @@ export function CommentsDrawer({ instanceId, templateId, open, onOpenChange }: P
     return Array.from(m.entries());
   }, [taggableQuestions]);
 
-  /** Close drawer + scroll the question row into view (with a tiny delay so the
-   *  drawer's exit animation can run before scrolling — otherwise the page
-   *  jump is jarring). */
+  /** Close drawer, then ask any ancestor Section/Subsection to expand if the
+   *  target lives inside their subtree (otherwise the anchor `<div>` isn't
+   *  in the DOM yet), then scroll. Two staggered timeouts:
+   *    220 ms — drawer slide-out animation finishes
+   *    140 ms — Section/Subsection re-renders with expanded=true + the
+   *             `.reveal` row transitions max-height from 0 to its final value.
+   *  The element won't be found if the user navigates away mid-flight; that
+   *  silent no-op is intentional. */
   function jumpToQuestion(levelId: string) {
     onOpenChange(false);
     setTimeout(() => {
-      const el = document.getElementById(questionAnchorId(levelId));
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.dispatchEvent(
+        new CustomEvent('intelli:jump-to-level', { detail: { levelId } }),
+      );
+      setTimeout(() => {
+        const el = document.getElementById(questionAnchorId(levelId));
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 140);
     }, 220);
   }
 

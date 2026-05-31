@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Spinner,
   MessageBar,
@@ -537,6 +537,41 @@ interface SectionBlockProps {
   disabled: boolean;
 }
 
+/**
+ * DOM-CustomEvent that comment tags + future external triggers fire to make
+ * the checklist scroll a specific question into view. SectionBlock and
+ * SubsectionBlock subscribe so they can auto-expand if the target lives
+ * somewhere inside their subtree — otherwise scrollIntoView would find no
+ * DOM node to anchor on.
+ */
+const JUMP_EVENT = 'intelli:jump-to-level';
+
+/** True if `id` is the node itself or anywhere in its descendants. */
+function containsLevel(node: LevelNode, id: string): boolean {
+  if (node.level.dnx_assessment_levelid === id) return true;
+  for (const child of node.children) {
+    if (containsLevel(child, id)) return true;
+  }
+  return false;
+}
+
+/** Subscribe to JUMP_EVENT and call `onMatch(levelId)` when the target is
+ *  in this node's subtree. Shared by Section and Subsection blocks. */
+function useJumpToDescendantListener(
+  node: LevelNode,
+  onMatch: (levelId: string) => void,
+) {
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent<{ levelId: string }>).detail;
+      if (!detail?.levelId) return;
+      if (containsLevel(node, detail.levelId)) onMatch(detail.levelId);
+    }
+    window.addEventListener(JUMP_EVENT, handler as EventListener);
+    return () => window.removeEventListener(JUMP_EVENT, handler as EventListener);
+  }, [node, onMatch]);
+}
+
 function SectionBlock({
   node,
   levelsById,
@@ -551,6 +586,9 @@ function SectionBlock({
 }: SectionBlockProps) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(true);
+  // Auto-expand when a jump event targets one of our descendants so the
+  // anchor target exists in the DOM by the time the scrollIntoView runs.
+  useJumpToDescendantListener(node, () => setExpanded(true));
 
   const directQuestions = node.children.filter(
     (c) => (c.level.dnx_assessment_level_type as LevelType) === 3,
@@ -640,6 +678,8 @@ function SubsectionBlock({
 }: SubsectionBlockProps) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(true);
+  // Auto-expand on cross-component jump (e.g. tag click in CommentsDrawer).
+  useJumpToDescendantListener(node, () => setExpanded(true));
   // Per-subsection counts so a long section is easier to scan.
   const counts = countVisibleAnswered(node, levelsById, responsesByLevelId);
   const outcome = evaluateNode(node, criteriaByLevelId, responsesByLevelId);

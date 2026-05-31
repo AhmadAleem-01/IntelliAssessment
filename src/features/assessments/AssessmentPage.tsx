@@ -22,7 +22,8 @@ import {
 import { useAssessmentInstance, useUpsertResponse, useAssessmentResponses } from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { CommentsDrawer, useGeneralCommentCount } from './CommentsDrawer';
-import { Comment20Regular } from '@fluentui/react-icons';
+import { VersionHistoryDrawer } from './VersionHistoryDrawer';
+import { Comment20Regular, History20Regular } from '@fluentui/react-icons';
 import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
 import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
 import { RejectAssessmentDialog } from './RejectAssessmentDialog';
@@ -336,6 +337,7 @@ export function AssessmentPage() {
   const upsert = useUpsertResponse(assessmentId ?? '');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const generalCommentCount = useGeneralCommentCount(assessmentId);
   useEffect(() => {
     if (upsert.isSuccess && upsert.data) {
@@ -431,6 +433,13 @@ export function AssessmentPage() {
             >
               Comments{generalCommentCount > 0 ? ` (${generalCommentCount})` : ''}
             </Button>
+            <Button
+              appearance="secondary"
+              icon={<History20Regular />}
+              onClick={() => setHistoryOpen(true)}
+            >
+              History
+            </Button>
             <LetterDialog
               assessment={assessment}
               trigger={
@@ -460,6 +469,12 @@ export function AssessmentPage() {
         templateId={templateId ?? undefined}
         open={commentsOpen}
         onOpenChange={setCommentsOpen}
+      />
+      <VersionHistoryDrawer
+        instanceId={assessment.dnx_assessment_instanceid}
+        templateId={templateId ?? undefined}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
       />
 
       <div className={styles.card}>

@@ -15,7 +15,10 @@ import type {
   Dnx_assessment_responses,
   Dnx_assessment_responsesBase,
 } from '../../generated/models/Dnx_assessment_responsesModel';
-import type { Dnx_assessment_versionsBase } from '../../generated/models/Dnx_assessment_versionsModel';
+import type {
+  Dnx_assessment_versions,
+  Dnx_assessment_versionsBase,
+} from '../../generated/models/Dnx_assessment_versionsModel';
 import type {
   Dnx_reviewer_comments,
   Dnx_reviewer_commentsBase,
@@ -32,6 +35,8 @@ export const assessmentKeys = {
     [...assessmentKeys.all, 'responses', instanceId] as const,
   comments: (instanceId: string) =>
     [...assessmentKeys.all, 'comments', instanceId] as const,
+  versions: (instanceId: string) =>
+    [...assessmentKeys.all, 'versions', instanceId] as const,
 };
 
 export interface CreateAssessmentInput {
@@ -404,6 +409,9 @@ async function snapshotAssessment(
     if (!upload.success) {
       console.warn('[snapshot] file upload failed', upload.error);
     }
+    // Refresh any open VersionHistoryDrawer for this instance. Fire-and-
+    // forget invalidation — if the drawer isn't mounted, this is a noop.
+    qc.invalidateQueries({ queryKey: assessmentKeys.versions(instanceId) });
   } catch (e) {
     console.warn('[snapshot] threw', e);
   }
@@ -787,4 +795,107 @@ export function useCreateReviewerComments(instanceId: string) {
       qc.invalidateQueries({ queryKey: assessmentKeys.comments(instanceId) });
     },
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Version history (snapshots written by snapshotAssessment)                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every `dnx_assessment_versions` row attached to this instance, newest first.
+ * The snapshot JSON itself lives in the `dnx_snapsho_tjson` file column —
+ * not loaded by this query, fetch on demand via `downloadSnapshotFile`.
+ */
+export function useVersionHistory(instanceId: string | undefined) {
+  return useQuery({
+    queryKey: assessmentKeys.versions(instanceId ?? ''),
+    enabled: !!instanceId,
+    queryFn: async (): Promise<Dnx_assessment_versions[]> => {
+      const r = await Dnx_assessment_versionsService.getAll({
+        filter: `_dnx_assessment_value eq ${instanceId}`,
+        orderBy: ['createdon desc'],
+        top: 200,
+      });
+      if (!r.success) throw new Error(r.error?.message ?? 'Failed to load history');
+      return r.data ?? [];
+    },
+  });
+}
+
+/**
+ * Shape of the JSON written by `snapshotAssessment`. Kept here so consumers
+ * (download, diff, future revert) share one source of truth.
+ */
+export interface AssessmentSnapshot {
+  capturedAt: string;
+  reason: string;
+  version: number;
+  instance: {
+    id: string;
+    name: string;
+    statuscode?: number;
+    outcome?: number | null;
+    outcomeNotes?: string | null;
+    dueDate?: string | null;
+    submittedOn?: string | null;
+    projectId?: string | null;
+    templateId?: string | null;
+  };
+  responses: Array<{
+    levelId: string | null;
+    questionName?: string;
+    boolean?: boolean | null;
+    option?: string | null;
+    multi?: string | null;
+    text?: string | null;
+    date?: string | null;
+  }>;
+}
+
+/** Pull a snapshot row's file column as a `Uint8Array`. Shared internal step. */
+async function fetchSnapshotBytes(versionRowId: string): Promise<Uint8Array> {
+  const client = getClient(dataSourcesInfo);
+  const r = await client.downloadFileFromRecord(
+    'dnx_assessment_versions',
+    versionRowId,
+    'dnx_snapsho_tjson',
+  );
+  if (!r.success || !r.data) {
+    throw new Error(r.error?.message ?? 'Failed to load snapshot');
+  }
+  // Clone into a fresh Uint8Array — some SDK return types tag the buffer as
+  // SharedArrayBuffer-backed, which Blob's constructor refuses.
+  return new Uint8Array(r.data);
+}
+
+/**
+ * Download a snapshot's `dnx_snapsho_tjson` file and save it as a JSON file
+ * via a synthesised anchor click. The SDK returns bytes; we wrap them in a
+ * Blob so the browser handles the download dialog. Used by the history
+ * drawer's per-row Download button.
+ */
+export async function downloadSnapshotFile(
+  versionRowId: string,
+  fileName: string,
+): Promise<void> {
+  const bytes = await fetchSnapshotBytes(versionRowId);
+  // Cast to BlobPart — Uint8Array's buffer type narrows wider than DOM types
+  // accept; runtime is unaffected, this is a TS-only widening.
+  const blob = new Blob([bytes as BlobPart], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke after a tick — Safari needs the URL to outlive the click event.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Fetch + parse a snapshot's JSON for in-memory consumption (diff view). */
+export async function fetchSnapshotJson(versionRowId: string): Promise<AssessmentSnapshot> {
+  const bytes = await fetchSnapshotBytes(versionRowId);
+  const text = new TextDecoder('utf-8').decode(bytes);
+  return JSON.parse(text) as AssessmentSnapshot;
 }
