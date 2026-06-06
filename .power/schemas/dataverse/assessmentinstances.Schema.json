@@ -115,6 +115,14 @@
           "x-ms-dataverse-type": "DateTimeType",
           "x-ms-schema-name": "dnx_DueDate"
         },
+        "dnx_evidence_mapping": {
+          "type": "string",
+          "title": "Evidence Mapping",
+          "x-ms-dataverse-attribute": "dnx_evidence_mapping",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "dnx_Evidence_Mapping",
+          "maxLength": 4000
+        },
         "dnx_outcome": {
           "type": "string",
           "title": "Outcome",

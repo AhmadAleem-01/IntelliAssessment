@@ -28,6 +28,7 @@ export interface Dnx_assessment_instancesBase {
   dnx_assessment_name: string;
   "dnx_AssessmentTemplate@odata.bind"?: string;
   dnx_duedate?: string;
+  dnx_evidence_mapping?: string;
   dnx_outcome?: Dnx_assessment_instancesdnx_outcome;
   dnx_outcome_notes?: string;
   "dnx_Project@odata.bind"?: string;

@@ -139,6 +139,75 @@ export function useCreateAssessmentInstance() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Evidence file mapping (M6b — assessment-time variable → real file binding)  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The assessor's binding of each template-declared evidence file variable
+ * (e.g. `q1-resume`) to a real uploaded file name. Persisted as JSON in the
+ * `dnx_evidence_mapping` multiline-text column so the auto-fill dialog can
+ * restore the assessor's picks across reloads instead of falling back to the
+ * name-match best guess every time.
+ */
+export type EvidenceMapping = Record<string, string>;
+
+/** Parse the stored mapping JSON; tolerant of empty / malformed values. */
+export function parseEvidenceMapping(stored: string | undefined | null): EvidenceMapping {
+  if (!stored) return {};
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const out: EvidenceMapping = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string' && v) out[k] = v;
+      }
+      return out;
+    }
+  } catch {
+    /* fall through — treat as no mapping */
+  }
+  return {};
+}
+
+/**
+ * Persist the evidence mapping on the instance. Writes the JSON into
+ * `dnx_evidence_mapping` and patches the detail cache optimistically so a
+ * reopened dialog sees the saved picks immediately. Deliberately does NOT bump
+ * the version or snapshot — the mapping is operator scaffolding for auto-fill,
+ * not an answer, so it shouldn't pollute the audit trail or version count.
+ */
+export function useSaveEvidenceMapping(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (mapping: EvidenceMapping): Promise<void> => {
+      const json = Object.keys(mapping).length ? JSON.stringify(mapping) : '';
+      const r = await Dnx_assessment_instancesService.update(
+        instanceId,
+        { dnx_evidence_mapping: json } as unknown as Partial<
+          Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>
+        >,
+      );
+      if (!r.success) {
+        throw new Error(r.error?.message ?? 'Failed to save evidence mapping');
+      }
+    },
+    onSuccess: (_data, mapping) => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      if (cached) {
+        qc.setQueryData<Dnx_assessment_instances>(assessmentKeys.detail(instanceId), {
+          ...cached,
+          dnx_evidence_mapping: Object.keys(mapping).length
+            ? JSON.stringify(mapping)
+            : '',
+        });
+      }
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Assessment Responses (M4b)                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -173,6 +242,16 @@ export interface UpsertResponseInput {
   dataType: DataType;
   /** The answer value, shape depends on dataType. */
   value: boolean | string | string[] | null;
+  /**
+   * AI provenance (M6b). Present only when this write came from accepting an
+   * AI-proposed answer. A manual edit afterwards passes nothing here, which
+   * flips `dnx_manual_override` true and clears the AI flag so the badge
+   * reflects that a human took over. Omit entirely for ordinary manual saves.
+   */
+  ai?: {
+    confidence: number;
+    sourceSummary: string;
+  };
 }
 
 /**
@@ -211,6 +290,30 @@ function responseColumns(
 }
 
 /**
+ * AI provenance columns (M6b). When `ai` is present the write is an accepted
+ * AI suggestion: flag it, store confidence + the model's rationale, and clear
+ * the manual-override flag. When absent it's a plain manual save — explicitly
+ * clear the AI flag and set manual_override so a later hand-edit of an
+ * AI-populated answer correctly demotes the badge to "edited by assessor".
+ */
+function aiColumns(
+  ai: UpsertResponseInput['ai'],
+): Partial<Dnx_assessment_responsesBase> {
+  if (ai) {
+    return {
+      dnx_ai_populated: true,
+      dnx_manual_override: false,
+      dnx_confidence_score: ai.confidence,
+      dnx_ai_source_summary: ai.sourceSummary.slice(0, 2000),
+    };
+  }
+  return {
+    dnx_ai_populated: false,
+    dnx_manual_override: true,
+  };
+}
+
+/**
  * Create or update a response row for a (instance, level) pair.
  *
  * Look up existing rows in the cache (keyed by `_dnx_assessment_level_value`).
@@ -230,7 +333,7 @@ export function useUpsertResponse(instanceId: string) {
           (r as unknown as Record<string, unknown>)._dnx_assessment_level_value ===
           input.levelId,
       );
-      const columns = responseColumns(input.dataType, input.value);
+      const columns = { ...responseColumns(input.dataType, input.value), ...aiColumns(input.ai) };
 
       if (existing) {
         const r = await Dnx_assessment_responsesService.update(

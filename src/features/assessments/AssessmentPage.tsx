@@ -19,7 +19,12 @@ import {
   DismissCircle16Regular,
   PersonStar16Regular,
 } from '@fluentui/react-icons';
-import { useAssessmentInstance, useUpsertResponse, useAssessmentResponses } from './api';
+import {
+  useAssessmentInstance,
+  useUpsertResponse,
+  useAssessmentResponses,
+  useSaveEvidenceMapping,
+} from './api';
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { CommentsDrawer, useGeneralCommentCount } from './CommentsDrawer';
 import { VersionHistoryDrawer } from './VersionHistoryDrawer';
@@ -37,8 +42,12 @@ import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree } from '../templates/levels/treeBuilder';
 import { useCriteriaForLevels } from '../rules/api';
 import { evaluateAssessment, findRootCriteria } from '../rules/engine';
-import { indexResponses } from './responseHelpers';
+import { indexResponses, isQuestionVisible, hasAnswer } from './responseHelpers';
 import type { EvaluationOutcome } from '../rules/types';
+import { AiPopulateDialog, type AcceptedSuggestion } from '../evidence/AiPopulateDialog';
+import { useEvidenceFiles } from '../evidence/api';
+import type { DataType, LevelType } from '../templates/levels/levelTypes';
+import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 
 const useStyles = makeStyles({
   backLink: {
@@ -336,9 +345,12 @@ export function AssessmentPage() {
   // Autosave state — lifted here so the badge in the hero can see the upsert
   // mutation's status. ChecklistRenderer gets the mutation via prop.
   const upsert = useUpsertResponse(assessmentId ?? '');
+  const saveMapping = useSaveEvidenceMapping(assessmentId ?? '');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // M6b — AI auto-fill: mapping + review dialog open state.
+  const [aiOpen, setAiOpen] = useState(false);
   const generalCommentCount = useGeneralCommentCount(assessmentId);
   useEffect(() => {
     if (upsert.isSuccess && upsert.data) {
@@ -355,14 +367,49 @@ export function AssessmentPage() {
   const { data: responses } = useAssessmentResponses(assessmentId);
   const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
+  // Real uploaded evidence files — offered as mapping targets in the auto-fill
+  // dialog. Keyed off the assessment name (same key the EvidenceCard uses, so
+  // React Query dedupes this query).
+  const { data: evidenceFiles } = useEvidenceFiles(assessment?.dnx_assessment_name);
+  const responsesByLevelId = indexResponses(responses);
   const liveOutcome: EvaluationOutcome = levels
     ? evaluateAssessment(
         buildTree(levels),
         criteriaByLevelId,
-        indexResponses(responses),
+        responsesByLevelId,
         findRootCriteria(levels, criteriaByLevelId),
       )
     : { kind: 'not-evaluable', reason: 'no-children' };
+
+  // Questions the AI should attempt: visible Question-type levels that have no
+  // answer yet. Offering only the open ones keeps the prompt small and avoids
+  // the model overwriting answers the assessor already gave. The level map is
+  // needed for the visibility check.
+  const levelsById = new Map(
+    (levels ?? []).map((l) => [l.dnx_assessment_levelid, l] as const),
+  );
+  const unansweredQuestions: Dnx_assessment_levels[] = (levels ?? []).filter((l) => {
+    if ((l.dnx_assessment_level_type as LevelType) !== 3) return false;
+    if (!isQuestionVisible(l, levelsById, responsesByLevelId)) return false;
+    return !hasAnswer(responsesByLevelId.get(l.dnx_assessment_levelid));
+  });
+
+  // Persist one accepted suggestion through the normal upsert path so autosave,
+  // version bump, and the AI badge all flow through the same code. The `ai`
+  // payload flags the row as AI-populated with its confidence + rationale.
+  const handleAcceptSuggestion = ({ level, suggestion }: AcceptedSuggestion) => {
+    upsert.mutate({
+      instanceId: assessment!.dnx_assessment_instanceid,
+      levelId: level.dnx_assessment_levelid,
+      questionName: level.dnx_name,
+      dataType: (level.dnx_data_type ?? 3) as DataType,
+      value: suggestion.value,
+      ai: {
+        confidence: suggestion.confidence,
+        sourceSummary: suggestion.rationale,
+      },
+    });
+  };
 
   if (isLoading) return <Spinner label="Loading assessment..." />;
   if (error) {
@@ -590,6 +637,22 @@ export function AssessmentPage() {
       <EvidenceCard
         assessmentName={assessment.dnx_assessment_name}
         disabled={label === 'PendingReview' || label === 'Complete'}
+        onAiPopulate={
+          label === 'PendingReview' || label === 'Complete'
+            ? undefined
+            : () => setAiOpen(true)
+        }
+      />
+
+      <AiPopulateDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        assessmentName={assessment.dnx_assessment_name}
+        questions={unansweredQuestions}
+        availableFiles={(evidenceFiles ?? []).map((f) => f.fileName)}
+        persistedMappingJson={assessment.dnx_evidence_mapping}
+        onPersistMapping={(mapping) => saveMapping.mutate(mapping)}
+        onAccept={handleAcceptSuggestion}
       />
 
       {templateId ? (

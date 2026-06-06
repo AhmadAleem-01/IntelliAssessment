@@ -28,6 +28,11 @@ import {
 } from './levelTypes';
 import { OptionListEditor } from './OptionListEditor';
 import { parseOptions, serializeOptions } from './options';
+import {
+  parseEvidenceBinding,
+  serializeEvidenceBinding,
+  type EvidenceBinding,
+} from './evidenceBinding';
 import { VisibilityRuleEditor } from './VisibilityRuleEditor';
 import { CriteriaEditor } from '../../rules/CriteriaEditor';
 import { parseVisibility, type VisibilityRule } from './visibility';
@@ -139,7 +144,11 @@ type FormState = LevelFormValue & {
   levelType: LevelType;
   options: string[];
   visibilityRule: VisibilityRule | undefined;
+  /** AI auto-fill binding (file variable + extraction query). Questions only. */
+  evidenceBinding: EvidenceBinding;
 };
+
+const EMPTY_BINDING: EvidenceBinding = { fileVariable: '', query: '' };
 
 function levelToForm(level: Dnx_assessment_levels): FormState {
   return {
@@ -155,6 +164,8 @@ function levelToForm(level: Dnx_assessment_levels): FormState {
     options: parseOptions(level.dnx_option_set_reference),
     documentTypeReference: level.dnx_document_type_reference ?? '',
     visibilityRule: parseVisibility(level.dnx_visibility_condition),
+    evidenceBinding:
+      parseEvidenceBinding(level.dnx_document_type_reference) ?? { ...EMPTY_BINDING },
   };
 }
 
@@ -171,6 +182,7 @@ const blankForm = (levelType: LevelType): FormState => ({
   options: [],
   documentTypeReference: '',
   visibilityRule: undefined,
+  evidenceBinding: { ...EMPTY_BINDING },
 });
 
 export function LevelDialog(props: Props) {
@@ -226,8 +238,11 @@ export function LevelDialog(props: Props) {
       isRequired: isQuestion ? form.isRequired : undefined,
       isReadOnly: !isQuestion ? form.isReadOnly : undefined,
       optionSetReference: isChoiceType ? serializeOptions(form.options) : undefined,
-      documentTypeReference:
-        isQuestion ? form.documentTypeReference?.trim() || undefined : undefined,
+      // The evidence binding (file variable + AI query) is stored in the
+      // dnx_document_type_reference column as JSON — see evidenceBinding.ts.
+      documentTypeReference: isQuestion
+        ? serializeEvidenceBinding(form.evidenceBinding)
+        : undefined,
       visibilityRule: isQuestion ? form.visibilityRule : undefined,
     };
 
@@ -364,14 +379,45 @@ export function LevelDialog(props: Props) {
                       />
                     </Field>
 
+                    <div className={styles.sectionDivider} />
+                    <div className={styles.sectionLabel}>AI auto-fill</div>
+
                     <Field
-                      label="Document type reference"
-                      hint="Used to auto-populate this field from uploaded evidence (optional)"
+                      label="Evidence file variable"
+                      hint="A placeholder name for the evidence this question reads (e.g. q1-resume). The assessor maps it to a real uploaded file at assessment time."
                     >
                       <Input
-                        value={form.documentTypeReference ?? ''}
-                        onChange={(_, d) => patch({ documentTypeReference: d.value })}
-                        placeholder='e.g. ["passport","drivers_licence"]'
+                        value={form.evidenceBinding.fileVariable}
+                        onChange={(_, d) =>
+                          patch({
+                            evidenceBinding: {
+                              ...form.evidenceBinding,
+                              fileVariable: d.value,
+                            },
+                          })
+                        }
+                        placeholder="e.g. q1-resume"
+                        maxLength={100}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Extraction query"
+                      hint="Tell the AI what to find and how to answer this question from the evidence text."
+                    >
+                      <Textarea
+                        value={form.evidenceBinding.query}
+                        onChange={(_, d) =>
+                          patch({
+                            evidenceBinding: {
+                              ...form.evidenceBinding,
+                              query: d.value,
+                            },
+                          })
+                        }
+                        placeholder="e.g. If the extracted text contains a bachelor's degree, set this to true."
+                        rows={3}
+                        maxLength={1000}
                       />
                     </Field>
 

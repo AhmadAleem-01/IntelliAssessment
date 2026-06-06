@@ -1,5 +1,5 @@
-import { makeStyles } from '@fluentui/react-components';
-import { Attach20Regular } from '@fluentui/react-icons';
+import { Button, makeStyles } from '@fluentui/react-components';
+import { Attach20Regular, Sparkle16Filled } from '@fluentui/react-icons';
 import { FileDropzone } from './FileDropzone';
 import { FileList } from './FileList';
 
@@ -21,6 +21,13 @@ const useStyles = makeStyles({
     fontWeight: 500,
     color: 'var(--color-text-primary)',
   },
+  headerTitle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    flex: 1,
+    minWidth: 0,
+  },
   body: {
     padding: '14px 18px',
     display: 'flex',
@@ -32,6 +39,12 @@ const useStyles = makeStyles({
 interface Props {
   assessmentName: string;
   disabled?: boolean;
+  /**
+   * When provided, an "AI auto-fill" button appears in the header. Clicking it
+   * opens the mapping + review dialog owned by the page. Omitted in read-only
+   * states (PendingReview / Complete) where no answers can change.
+   */
+  onAiPopulate?: () => void;
 }
 
 /**
@@ -40,13 +53,25 @@ interface Props {
  * that's what the SharePoint flow uses to pick the folder (see the flow
  * contracts in `api.ts`).
  */
-export function EvidenceCard({ assessmentName, disabled }: Props) {
+export function EvidenceCard({ assessmentName, disabled, onAiPopulate }: Props) {
   const styles = useStyles();
   return (
     <div className={styles.card}>
       <div className={styles.header}>
-        <Attach20Regular />
-        Evidence files
+        <span className={styles.headerTitle}>
+          <Attach20Regular />
+          Evidence files
+        </span>
+        {onAiPopulate && (
+          <Button
+            appearance="primary"
+            size="small"
+            icon={<Sparkle16Filled />}
+            onClick={onAiPopulate}
+          >
+            AI auto-fill
+          </Button>
+        )}
       </div>
       <div className={styles.body}>
         <FileDropzone assessmentName={assessmentName} disabled={disabled} />

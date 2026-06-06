@@ -5,6 +5,7 @@ import {
   CheckmarkCircle16Regular,
   CheckmarkCircle16Filled,
   DismissCircle16Filled,
+  Sparkle16Filled,
 } from '@fluentui/react-icons';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { Dnx_assessment_responses } from '../../generated/models/Dnx_assessment_responsesModel';
@@ -52,6 +53,20 @@ const useStyles = makeStyles({
     height: '6px',
     borderRadius: '50%',
     backgroundColor: 'var(--color-purple)',
+  },
+  aiBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.02em',
+    lineHeight: 1.3,
+    backgroundColor: 'var(--color-purple-soft)',
+    color: 'var(--color-purple-text)',
+    border: '0.5px solid var(--color-purple)',
   },
   outcomeChip: {
     display: 'inline-flex',
@@ -235,6 +250,27 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
         </span>
         {level.dnx_include_in_letter && (
           <span className={styles.letterDot} title="Included in outcome letter" />
+        )}
+        {response?.dnx_ai_populated === true && response?.dnx_manual_override !== true && (
+          <Tooltip
+            content={
+              `AI-suggested answer${
+                typeof response.dnx_confidence_score === 'number'
+                  ? ` (${Math.round(response.dnx_confidence_score * 100)}% confidence)`
+                  : ''
+              }.${response.dnx_ai_source_summary ? ` ${response.dnx_ai_source_summary}` : ''} Edit to override.`
+            }
+            relationship="description"
+            withArrow
+          >
+            <span className={styles.aiBadge}>
+              <Sparkle16Filled />
+              AI
+              {typeof response.dnx_confidence_score === 'number'
+                ? ` · ${Math.round(response.dnx_confidence_score * 100)}%`
+                : ''}
+            </span>
+          </Tooltip>
         )}
         {outcome.kind === 'pass' && (
           <Tooltip
