@@ -455,6 +455,18 @@ To run inside the Model-Driven host, use Power Platform CLI: `pac code run`. Aut
 
 **The full assessor → reviewer → AI loop is shipped.** M0–M7d, M8a, M8c.1–4, and **M6b** are all done: template authoring (tree + scoring + conditional visibility + per-question AI bindings), assessment runtime with autosave, submit/reopen/approve/reject, evidence upload + OCR, AI auto-fill with file mapping, outcome letter + PDF, dashboard, threaded comments, version history + revert. What's left is **M8b** (deferred), **M9** (hardening), and a couple of M6b follow-ups.
 
+### Backlog (TODO)
+
+Unbuilt work, roughly in priority order. Detail for each is in the sections below.
+
+- [ ] **Application-details JSON source** (M6b follow-up) — per-assessment application-details JSON object that questions can query in addition to / instead of an evidence file. Cleanest next AI slice; the binding model + `aiPopulate.ts` grouping already anticipate it.
+- [ ] **M9 — Role-gated actions** — gate Submit / Reopen / Delete / Approve / Reject / Mark resolved / AI auto-fill by Entra/Dataverse role (Assessor / Reviewer / Admin). Biggest correctness gap before real users — everything is visible to everyone today.
+- [ ] **M9 — a11y + perf** — axe-core scan + keyboard nav across every field type; 200-question template perf check (PRD §8 ≤ 3 s) with `@tanstack/react-virtual` if needed.
+- [ ] **Subsection file-variable catalog** (M6b follow-up) — subsection declares the expected file variables its questions pick from; tightens authoring + the mapping UI.
+- [ ] **M9 — Persisted outcome pill on `/assessments` list** — the global list shows status pills but not the computed/persisted outcome.
+- [ ] **M8b — Custom letter builder + reason-grouped qualifications** — deferred; needs the reason model (free-text vs picklist) scoped with the user first. See [[project_letter_customisation]].
+- [ ] **Polish** — code-split with `React.lazy()` (bundle ~1.68 MB / 474 kB gzipped); throttle audit snapshots (skip when < ~30 s since last Autosave); multi-value visibility rules; mobile responsiveness audit; clean up the two baseline `react-hooks/set-state-in-effect` lint errors.
+
 ### M6b follow-ups (natural next AI work)
 
 - **Application-details JSON querying** — the second evidence source the user described: per-assessment, supply an application-details JSON object; questions can query that JSON in addition to (or instead of) an evidence file. The `evidenceBinding` shape is forward-compatible (add an `applicationDataQuery` field — gotcha V) and `aiPopulate.ts` already groups by source, so this slots in alongside the file-variable path.
