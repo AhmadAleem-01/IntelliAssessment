@@ -23,6 +23,7 @@ import { useAssessmentInstance, useUpsertResponse, useAssessmentResponses } from
 import { ChecklistRenderer } from './ChecklistRenderer';
 import { CommentsDrawer, useGeneralCommentCount } from './CommentsDrawer';
 import { VersionHistoryDrawer } from './VersionHistoryDrawer';
+import { EvidenceCard } from '../evidence/EvidenceCard';
 import { Comment20Regular, History20Regular } from '@fluentui/react-icons';
 import { SubmitAssessmentDialog } from './SubmitAssessmentDialog';
 import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
@@ -585,6 +586,11 @@ export function AssessmentPage() {
           </div>
         </div>
       )}
+
+      <EvidenceCard
+        assessmentName={assessment.dnx_assessment_name}
+        disabled={label === 'PendingReview' || label === 'Complete'}
+      />
 
       {templateId ? (
         <ChecklistRenderer

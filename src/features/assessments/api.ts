@@ -336,7 +336,8 @@ export type SnapshotReason =
   | 'Submitted'
   | 'Reopened'
   | 'Approved'
-  | 'Rejected';
+  | 'Rejected'
+  | 'Reverted';
 
 async function snapshotAssessment(
   qc: ReturnType<typeof useQueryClient>,
@@ -898,4 +899,169 @@ export async function fetchSnapshotJson(versionRowId: string): Promise<Assessmen
   const bytes = await fetchSnapshotBytes(versionRowId);
   const text = new TextDecoder('utf-8').decode(bytes);
   return JSON.parse(text) as AssessmentSnapshot;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Revert to snapshot — full restore of instance fields + responses           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Replay a snapshot back onto the live instance.
+ *
+ * Restore steps, in order:
+ *   1. Patch the instance row with the snapshot's `instance` fields
+ *      (statuscode, outcome, outcomeNotes, dueDate, submittedOn, name).
+ *      Version bumps by 1 — the revert is itself a state change.
+ *   2. Reconcile responses against the snapshot:
+ *        - update if the same level exists today
+ *        - create if the snapshot has it but the instance doesn't
+ *        - delete if today has it but the snapshot does not
+ *   3. Snapshot the post-revert state with reason `'Reverted'` so the audit
+ *      log records what was restored and at what version (fire-and-forget,
+ *      matching the rest of the snapshot path).
+ *
+ * Caller is responsible for the destructive-action confirmation UX — this
+ * mutation just does the writes.
+ */
+export function useRevertToVersion(instanceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      snapshot: AssessmentSnapshot,
+    ): Promise<Dnx_assessment_instances> => {
+      const cached = qc.getQueryData<Dnx_assessment_instances>(
+        assessmentKeys.detail(instanceId),
+      );
+      const nextVersion = (cached?.dnx_version ?? 0) + 1;
+
+      // --- Step 1: patch the instance row -----------------------------------
+      const instanceChanges: Record<string, unknown> = {
+        dnx_assessment_name: snapshot.instance.name,
+        dnx_version: nextVersion,
+        dnx_outcome:
+          snapshot.instance.outcome === null || snapshot.instance.outcome === undefined
+            ? ASSESSMENT_OUTCOME.Pending
+            : snapshot.instance.outcome,
+        dnx_outcome_notes: snapshot.instance.outcomeNotes ?? '',
+        dnx_duedate: snapshot.instance.dueDate ?? null,
+        dnx_submittedon: snapshot.instance.submittedOn ?? null,
+      };
+      if (snapshot.instance.statuscode !== undefined) {
+        instanceChanges.statuscode = snapshot.instance.statuscode;
+      }
+      const patched = await Dnx_assessment_instancesService.update(
+        instanceId,
+        instanceChanges as unknown as Partial<
+          Omit<Dnx_assessment_instancesBase, 'dnx_assessment_instanceid'>
+        >,
+      );
+      if (!patched.success || !patched.data) {
+        throw new Error(patched.error?.message ?? 'Failed to restore instance fields');
+      }
+
+      // --- Step 2: reconcile responses --------------------------------------
+      // Refetch current responses so we don't operate on a stale cache.
+      const currentReq = await Dnx_assessment_responsesService.getAll({
+        filter: `_dnx_assessment_value eq ${instanceId}`,
+        top: 500,
+      });
+      if (!currentReq.success) {
+        throw new Error(
+          currentReq.error?.message ?? 'Failed to load current responses for revert',
+        );
+      }
+      const currentRows = currentReq.data ?? [];
+      const currentByLevel = new Map<string, Dnx_assessment_responses>();
+      for (const r of currentRows) {
+        const lid = lookupId(r, 'dnx_assessment_level');
+        if (lid) currentByLevel.set(lid, r);
+      }
+
+      const snapshotLevelIds = new Set<string>();
+
+      // Updates + creates from the snapshot's response list. Sequential so a
+      // single failure surfaces clearly; the volume is bounded by the
+      // template question count (typically ≤ 200).
+      for (const snap of snapshot.responses) {
+        if (!snap.levelId) continue;
+        snapshotLevelIds.add(snap.levelId);
+        const columns = snapshotResponseToColumns(snap);
+        const existing = currentByLevel.get(snap.levelId);
+        if (existing) {
+          const r = await Dnx_assessment_responsesService.update(
+            existing.dnx_assessment_responseid,
+            columns as Partial<
+              Omit<Dnx_assessment_responsesBase, 'dnx_assessment_responseid'>
+            >,
+          );
+          if (!r.success) {
+            throw new Error(
+              r.error?.message ?? 'Failed to restore a response during revert',
+            );
+          }
+        } else {
+          const record: Record<string, unknown> = {
+            dnx_name: snap.questionName ?? 'Response',
+            'dnx_Assessment@odata.bind': `/dnx_assessment_instances(${instanceId})`,
+            'dnx_Assessment_Level@odata.bind': `/dnx_assessment_levels(${snap.levelId})`,
+            statecode: 0,
+            statuscode: 1,
+            ...columns,
+          };
+          const r = await Dnx_assessment_responsesService.create(
+            record as unknown as Omit<
+              Dnx_assessment_responsesBase,
+              'dnx_assessment_responseid'
+            >,
+          );
+          if (!r.success) {
+            throw new Error(
+              r.error?.message ?? 'Failed to restore a response during revert',
+            );
+          }
+        }
+      }
+
+      // Deletes for responses that exist today but didn't at snapshot time.
+      for (const [levelId, row] of currentByLevel.entries()) {
+        if (snapshotLevelIds.has(levelId)) continue;
+        await Dnx_assessment_responsesService.delete(row.dnx_assessment_responseid);
+      }
+
+      return patched.data;
+    },
+    onSuccess: (data) => {
+      // Push the patched instance into the cache so the AssessmentPage hero
+      // updates without waiting for the refetch.
+      qc.setQueryData(assessmentKeys.detail(instanceId), data);
+      qc.invalidateQueries({ queryKey: assessmentKeys.list() });
+      qc.invalidateQueries({ queryKey: assessmentKeys.responses(instanceId) });
+      qc.invalidateQueries({ queryKey: assessmentKeys.versions(instanceId) });
+      const projectId = (data as unknown as Record<string, unknown>)
+        ._dnx_project_value as string | undefined;
+      if (projectId) {
+        qc.invalidateQueries({ queryKey: assessmentKeys.byProject(projectId) });
+      }
+      // Audit snapshot for the revert event itself. Fire-and-forget so a
+      // snapshot failure can't undo the successful restore.
+      void snapshotAssessment(qc, instanceId, data.dnx_version ?? 0, 'Reverted');
+    },
+  });
+}
+
+/**
+ * Turn a serialised snapshot response into the per-column write payload.
+ * Inverse of the projection inside `snapshotAssessment`; lives next to that
+ * function so both stay in sync if either side adds a column.
+ */
+function snapshotResponseToColumns(
+  snap: AssessmentSnapshot['responses'][number],
+): Partial<Dnx_assessment_responsesBase> {
+  return {
+    dnx_response_boolean: snap.boolean ?? undefined,
+    dnx_response_option: snap.option ?? undefined,
+    dnx_response_multi: snap.multi ?? undefined,
+    dnx_response_text: snap.text ?? undefined,
+    dnx_response_date: snap.date ? snap.date.slice(0, 10) : undefined,
+  };
 }

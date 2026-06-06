@@ -9,7 +9,92 @@
   "buildEntryPoint": "index.html",
   "localAppUrl": "http://localhost:3000",
   "logoPath": "Default",
-  "connectionReferences": {},
+  "connectionReferences": {
+    "36717d57-0592-456f-b4a2-cd11f45c30c3": {
+      "id": "/providers/microsoft.powerapps/apis/shared_sharepointonline",
+      "displayName": "SharePoint"
+    },
+    "91afeaba-b981-4cce-a6fe-eaa51938f1c1": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "uploadsharepointfile"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "4c4c9155-dd61-f111-a826-6045bde5d4a6",
+        "workflowDisplayName": "Upload Sharepoint File",
+        "workflowName": "764f466b-5a5e-f2bd-c9e1-91313a1dd986",
+        "dependencies": {
+          "shared_sharepointonline": "36717d57-0592-456f-b4a2-cd11f45c30c3"
+        }
+      }
+    },
+    "8ffb33dc-4b43-41a5-bbd2-20ffd43fb9d3": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "getsharepointfiles"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "c59442fa-c261-f111-a826-6045bde5df24",
+        "workflowDisplayName": "Get Sharepoint Files",
+        "workflowName": "e7e19f3a-c2ed-2568-5f2b-e46f62cbdc99",
+        "dependencies": {
+          "shared_sharepointonline": "36717d57-0592-456f-b4a2-cd11f45c30c3"
+        }
+      }
+    },
+    "46518282-6bc8-442f-81db-46d982ae584c": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "deleteasharepointfile"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "2aeed792-df61-f111-a826-6045bde5d4a6",
+        "workflowDisplayName": "Delete a Sharepoint file",
+        "workflowName": "a6e20bb2-7163-7f69-5dbd-6eb0293a6479",
+        "dependencies": {
+          "shared_sharepointonline": "36717d57-0592-456f-b4a2-cd11f45c30c3"
+        }
+      }
+    },
+    "44e11f3a-ff9a-4ef1-a72b-82b008d1ce8a": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "aiagentflow"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "c520b06d-205f-f111-a826-6045bde5d5bc",
+        "workflowDisplayName": "AI Agent Flow",
+        "workflowName": "32f55c04-07b5-2e5f-a68a-0149b7dc87fd"
+      }
+    },
+    "17bcced4-3ffd-430b-a5f0-8376cf6060d9": {
+      "id": "/providers/microsoft.powerapps/apis/shared_formrecognizer",
+      "displayName": "Azure AI Document Intelligence (form recognizer)",
+      "authenticationType": "keyBasedAuth",
+      "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_formrecognizer/connections/shared-formrecognize-374e3af0-90e5-4e88-ba2e-e5914b3bbe08",
+      "xrmConnectionReferenceLogicalName": "dnx_sharedformrecognizer_73c24"
+    },
+    "0196b21d-b0b4-4d15-ba4d-a70a78f5a313": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "documenttextextractionflow"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "664b808c-2f5f-f111-a826-6045bde5df24",
+        "workflowDisplayName": "Document Text Extraction Flow",
+        "workflowName": "2153cace-4b4b-2949-2cee-8b75f64898f8",
+        "dependencies": {
+          "shared_formrecognizer": "17bcced4-3ffd-430b-a5f0-8376cf6060d9",
+          "shared_sharepointonline": "36717d57-0592-456f-b4a2-cd11f45c30c3"
+        }
+      }
+    }
+  },
   "databaseReferences": {
     "default.cds": {
       "dataSources": {

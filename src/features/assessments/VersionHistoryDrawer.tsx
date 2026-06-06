@@ -12,14 +12,14 @@ import {
 } from '@fluentui/react-components';
 import {
   History16Regular,
-  ArrowDownload16Regular,
   Dismiss20Regular,
   ArrowSwap16Regular,
+  ArrowSync16Regular,
   Filter16Regular,
 } from '@fluentui/react-icons';
 import type { Dnx_assessment_versions } from '../../generated/models/Dnx_assessment_versionsModel';
 import { lookupName } from '../../lib/dataverse';
-import { useVersionHistory, downloadSnapshotFile } from './api';
+import { useVersionHistory } from './api';
 import { SnapshotDiffDialog } from './SnapshotDiffDialog';
 
 const useStyles = makeStyles({
@@ -227,11 +227,12 @@ export function VersionHistoryDrawer({
 }: Props) {
   const styles = useStyles();
   const { data: versions, isLoading, error } = useVersionHistory(open ? instanceId : undefined);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [compareTarget, setCompareTarget] = useState<Dnx_assessment_versions | null>(
-    null,
-  );
+  // Open target row + which entry point opened it (Compare = preview first,
+  // Replace = jump straight to the confirmation panel).
+  const [diffTarget, setDiffTarget] = useState<{
+    row: Dnx_assessment_versions;
+    mode: 'compare' | 'replace';
+  } | null>(null);
   // Set of reasons to keep. Empty set === show everything (no active filter).
   const [activeReasons, setActiveReasons] = useState<Set<string>>(new Set());
 
@@ -248,21 +249,6 @@ export function VersionHistoryDrawer({
       else next.add(reason);
       return next;
     });
-  }
-
-  async function handleDownload(v: Dnx_assessment_versions) {
-    setDownloadingId(v.dnx_assessment_versionid);
-    setDownloadError(null);
-    try {
-      const ts = v.createdon ? new Date(v.createdon).toISOString().slice(0, 19).replace(/[:.]/g, '-') : 'snapshot';
-      const fname = `snapshot-v${v.dnx_version_number ?? '?'}-${ts}.json`;
-      await downloadSnapshotFile(v.dnx_assessment_versionid, fname);
-    } catch (e) {
-      console.error('[version download] failed', e);
-      setDownloadError((e as Error).message);
-    } finally {
-      setDownloadingId(null);
-    }
   }
 
   function fmtTime(iso: string | undefined): string {
@@ -382,11 +368,9 @@ export function VersionHistoryDrawer({
 
       <DrawerBody style={{ padding: 0 }}>
         <div className={styles.body}>
-          {(error || downloadError) && (
+          {error && (
             <MessageBar intent="error">
-              <MessageBarBody>
-                {downloadError ?? (error as Error).message}
-              </MessageBarBody>
+              <MessageBarBody>{(error as Error).message}</MessageBarBody>
             </MessageBar>
           )}
 
@@ -432,21 +416,18 @@ export function VersionHistoryDrawer({
                     size="small"
                     icon={<ArrowSwap16Regular />}
                     className={styles.downloadBtn}
-                    onClick={() => setCompareTarget(v)}
+                    onClick={() => setDiffTarget({ row: v, mode: 'compare' })}
                   >
                     Compare
                   </Button>
                   <Button
                     appearance="subtle"
                     size="small"
-                    icon={<ArrowDownload16Regular />}
+                    icon={<ArrowSync16Regular />}
                     className={styles.downloadBtn}
-                    disabled={downloadingId === v.dnx_assessment_versionid}
-                    onClick={() => handleDownload(v)}
+                    onClick={() => setDiffTarget({ row: v, mode: 'replace' })}
                   >
-                    {downloadingId === v.dnx_assessment_versionid
-                      ? 'Downloading…'
-                      : 'JSON'}
+                    Replace
                   </Button>
                 </div>
               </div>
@@ -458,13 +439,14 @@ export function VersionHistoryDrawer({
       <SnapshotDiffDialog
         instanceId={instanceId}
         templateId={templateId}
-        versionRowId={compareTarget?.dnx_assessment_versionid ?? null}
-        versionNumber={compareTarget?.dnx_version_number}
-        capturedAt={compareTarget?.createdon}
-        reason={compareTarget?.dnx_change_summary}
-        open={compareTarget !== null}
+        versionRowId={diffTarget?.row.dnx_assessment_versionid ?? null}
+        versionNumber={diffTarget?.row.dnx_version_number}
+        capturedAt={diffTarget?.row.createdon}
+        reason={diffTarget?.row.dnx_change_summary}
+        startInConfirm={diffTarget?.mode === 'replace'}
+        open={diffTarget !== null}
         onOpenChange={(o) => {
-          if (!o) setCompareTarget(null);
+          if (!o) setDiffTarget(null);
         }}
       />
     </OverlayDrawer>

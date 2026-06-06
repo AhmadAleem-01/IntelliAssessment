@@ -22,6 +22,7 @@ import {
   fetchSnapshotJson,
   useAssessmentInstance,
   useAssessmentResponses,
+  useRevertToVersion,
   type AssessmentSnapshot,
 } from './api';
 import { readResponseValue } from './responseHelpers';
@@ -161,6 +162,43 @@ const useStyles = makeStyles({
     paddingBottom: '4px',
     borderBottom: '0.5px solid var(--color-border-tertiary)',
   },
+  // Inline confirmation block — appears in DialogActions when the user clicks
+  // Revert, replacing the primary button with a warning + Cancel / Confirm.
+  // Inline rather than a nested dialog so we don't stack two modal layers.
+  confirmPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '12px 14px',
+    backgroundColor: 'var(--color-amber-soft)',
+    border: '0.5px solid var(--color-amber)',
+    borderRadius: 'var(--border-radius-md)',
+    fontSize: '12px',
+    lineHeight: 1.5,
+    color: 'var(--color-text-primary)',
+    width: '100%',
+  },
+  confirmTitle: {
+    fontSize: '11px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: 'var(--color-amber-text)',
+  },
+  confirmActions: {
+    display: 'flex',
+    gap: '8px',
+    justifyContent: 'flex-end',
+  },
+  revertBtn: {
+    backgroundColor: 'var(--color-red, #c4302b) !important',
+    color: '#ffffff !important',
+    border: '0.5px solid var(--color-red, #c4302b) !important',
+    ':hover': {
+      backgroundColor: 'var(--color-red-text, #8a1f1a) !important',
+      border: '0.5px solid var(--color-red-text, #8a1f1a) !important',
+    },
+  },
 });
 
 interface Props {
@@ -172,6 +210,12 @@ interface Props {
   templateId: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * When true, the confirmation panel is shown straight away (used by the
+   * "Replace" entry point on the history drawer, which is a one-click action).
+   * Compare entry leaves this false so the user sees the diff first.
+   */
+  startInConfirm?: boolean;
 }
 
 /**
@@ -191,13 +235,18 @@ export function SnapshotDiffDialog({
   templateId,
   open,
   onOpenChange,
+  startInConfirm = false,
 }: Props) {
   const styles = useStyles();
   const { data: instance } = useAssessmentInstance(open ? instanceId : undefined);
   const { data: levels } = useTemplateLevels(open ? templateId : undefined);
   const { data: responses } = useAssessmentResponses(open ? instanceId : undefined);
+  const revert = useRevertToVersion(instanceId);
   const [snapshot, setSnapshot] = useState<AssessmentSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Confirm-revert state lives in the dialog rather than the parent so it
+  // resets each time the dialog reopens for a fresh snapshot.
+  const [confirming, setConfirming] = useState(false);
 
   // Fetch the snapshot JSON the first time the dialog opens for a given row.
   useEffect(() => {
@@ -205,6 +254,8 @@ export function SnapshotDiffDialog({
     let cancelled = false;
     setSnapshot(null);
     setLoadError(null);
+    setConfirming(startInConfirm);
+    revert.reset();
     fetchSnapshotJson(versionRowId)
       .then((data) => {
         if (!cancelled) setSnapshot(data);
@@ -215,7 +266,15 @@ export function SnapshotDiffDialog({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, versionRowId]);
+
+  async function handleRevert() {
+    if (!snapshot) return;
+    await revert.mutateAsync(snapshot);
+    setConfirming(false);
+    onOpenChange(false);
+  }
 
   const diff = useMemo(() => {
     if (!snapshot || !levels) return null;
@@ -320,11 +379,56 @@ export function SnapshotDiffDialog({
             )}
           </DialogContent>
           <DialogActions>
-            <DialogTrigger disableButtonEnhancement>
-              <Button appearance="secondary" type="button">
-                Close
-              </Button>
-            </DialogTrigger>
+            {confirming ? (
+              <div className={styles.confirmPanel}>
+                <div className={styles.confirmTitle}>Confirm revert</div>
+                <div>
+                  This will overwrite the current instance and every response so
+                  they match snapshot <b>v{versionNumber}</b>. A new audit snapshot
+                  ('Reverted') will be written so the change itself stays in
+                  history. Continue?
+                </div>
+                {revert.error && (
+                  <MessageBar intent="error">
+                    <MessageBarBody>{(revert.error as Error).message}</MessageBarBody>
+                  </MessageBar>
+                )}
+                <div className={styles.confirmActions}>
+                  <Button
+                    appearance="secondary"
+                    type="button"
+                    disabled={revert.isPending}
+                    onClick={() => setConfirming(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className={styles.revertBtn}
+                    type="button"
+                    disabled={revert.isPending}
+                    onClick={handleRevert}
+                  >
+                    {revert.isPending ? 'Reverting…' : 'Yes, revert'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <DialogTrigger disableButtonEnhancement>
+                  <Button appearance="secondary" type="button">
+                    Close
+                  </Button>
+                </DialogTrigger>
+                <Button
+                  className={styles.revertBtn}
+                  type="button"
+                  disabled={!snapshot || revert.isPending}
+                  onClick={() => setConfirming(true)}
+                >
+                  Revert to this version
+                </Button>
+              </>
+            )}
           </DialogActions>
         </DialogBody>
       </DialogSurface>
