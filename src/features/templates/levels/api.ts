@@ -208,6 +208,36 @@ export function useUpdateLevel(templateId: string, levelId: string) {
  * Placement: the copy is appended to the end of the parent's sibling bucket.
  * Users can drag-reorder it if they want it elsewhere.
  */
+/**
+ * Patch ONLY a Question level's evidence binding (`dnx_document_type_reference`,
+ * which holds the `{ fileVariable, query }` JSON — see gotcha V). Used by the
+ * AI conditioning tab so editing a binding there doesn't round-trip the whole
+ * level form. Pass the serialised JSON string (or empty string to clear).
+ */
+export function useUpdateEvidenceBinding(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      levelId: string;
+      documentTypeReference: string;
+    }): Promise<void> => {
+      const r = await Dnx_assessment_levelsService.update(
+        params.levelId,
+        {
+          dnx_document_type_reference: params.documentTypeReference,
+        } as unknown as Partial<Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>>,
+      );
+      if (!r.success) {
+        console.error('[update evidence binding] failed', r.error);
+        throw new Error(r.error?.message ?? 'Failed to save AI binding');
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: levelKeys.byTemplate(templateId) });
+    },
+  });
+}
+
 export function useDuplicateLevel(templateId: string) {
   const qc = useQueryClient();
   return useMutation({

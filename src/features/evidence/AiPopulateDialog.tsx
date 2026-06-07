@@ -8,6 +8,7 @@ import {
   Button,
   Dropdown,
   Option,
+  Checkbox,
   Spinner,
   MessageBar,
   MessageBarBody,
@@ -61,14 +62,43 @@ const useStyles = makeStyles({
     overflow: 'auto',
     paddingRight: '4px',
   },
+  // A variable group: the file-mapping header row + its question checklist.
+  mapGroup: {
+    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--color-background-primary)',
+    overflow: 'hidden',
+  },
   mapRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     padding: '12px 14px',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
+  },
+  qPickList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: '4px 14px 12px 14px',
+    borderTop: '0.5px solid var(--color-border-tertiary)',
+    backgroundColor: 'var(--color-background-secondary)',
+  },
+  qPick: { fontSize: '13px' },
+  qPickLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+  },
+  qPickAnswered: {
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    padding: '1px 6px',
+    borderRadius: 'var(--border-radius-pill)',
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
   },
   mapInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
   mapVar: {
@@ -106,6 +136,18 @@ const useStyles = makeStyles({
   cardTop: { display: 'flex', alignItems: 'flex-start', gap: '10px' },
   qBlock: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
   qLabel: { fontSize: '13px', fontWeight: 500, color: 'var(--color-text-primary)' },
+  overwriteTag: {
+    marginLeft: '8px',
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    padding: '1px 6px',
+    borderRadius: 'var(--border-radius-pill)',
+    backgroundColor: 'var(--color-amber-soft)',
+    color: 'var(--color-amber-text)',
+    whiteSpace: 'nowrap',
+  },
   qValue: {
     fontSize: '13px',
     color: 'var(--color-purple-text)',
@@ -159,12 +201,29 @@ const useStyles = makeStyles({
     color: 'var(--color-text-secondary)',
     lineHeight: 1.5,
   },
-  footerInfo: {
+  // Footer laid out as a column: the button row on top, a status line beneath
+  // it (full-width, so the counts read clearly under the actions instead of
+  // crowding them on the left).
+  footer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '8px',
+    width: '100%',
+  },
+  footerBtns: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+  },
+  footerStatus: {
     fontSize: '11px',
     color: 'var(--color-text-tertiary)',
-    marginRight: 'auto',
-    alignSelf: 'center',
+    textAlign: 'right',
   },
+  // Keep every footer button on one line + same height — Fluent will otherwise
+  // wrap a label like "Accept all (1)" when the action row gets tight.
+  actionBtn: { whiteSpace: 'nowrap', flexShrink: 0 },
   warnStack: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' },
 });
 
@@ -191,8 +250,17 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   assessmentName: string;
-  /** Unanswered, visible question levels to offer the model. */
+  /**
+   * All Question levels (answered or not, visible or not). The dialog narrows
+   * to those carrying a file variable; the assessor picks which proposals to
+   * apply in the review step, so it's safe to offer everything.
+   */
   questions: Dnx_assessment_levels[];
+  /**
+   * Level ids that already have an answer — the review list flags these so the
+   * assessor knows accepting will overwrite the current value.
+   */
+  answeredLevelIds: Set<string>;
   /** Real uploaded evidence file names the variables can be mapped to. */
   availableFiles: string[];
   /**
@@ -226,6 +294,7 @@ export function AiPopulateDialog({
   onOpenChange,
   assessmentName,
   questions,
+  answeredLevelIds,
   availableFiles,
   persistedMappingJson,
   onPersistMapping,
@@ -239,12 +308,26 @@ export function AiPopulateDialog({
   // variable the assessor deliberately unmapped (overriding a guess).
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [accepted, setAccepted] = useState<Set<string>>(new Set());
+  // Which question levelIds will actually be sent to the AI. Lets the assessor
+  // trim the batch so the agent is queried as little as possible. Defaults to
+  // the unanswered bound questions (re-querying an answered one is opt-in).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const aiQuestions = useMemo(() => toAiQuestions(questions), [questions]);
   const { groups, unbound } = useMemo(
     () => groupByFileVariable(aiQuestions),
     [aiQuestions],
   );
+  // Default selection: every bound question that isn't already answered.
+  const defaultSelected = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of groups) {
+      for (const q of g.questions) {
+        if (!answeredLevelIds.has(q.levelId)) s.add(q.levelId);
+      }
+    }
+    return s;
+  }, [groups, answeredLevelIds]);
   const levelById = useMemo(
     () => new Map(questions.map((q) => [q.dnx_assessment_levelid, q] as const)),
     [questions],
@@ -289,6 +372,7 @@ export function AiPopulateDialog({
     if (open) {
       setOverrides({});
       setAccepted(new Set());
+      setSelected(defaultSelected);
       setPhase('map');
       populate.reset();
     }
@@ -298,14 +382,37 @@ export function AiPopulateDialog({
     setOverrides((prev) => ({ ...prev, [variable]: file }));
   }
 
+  function toggleQuestion(levelId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(levelId)) next.delete(levelId);
+      else next.add(levelId);
+      return next;
+    });
+  }
+
   const mappedCount = groups.filter((g) => mapping[g.fileVariable]).length;
+
+  // Groups trimmed to the selected questions only — this is exactly what gets
+  // sent to the AI, so unticked questions are never queried. A mapped variable
+  // with zero selected questions is dropped (no point extracting its file).
+  const runnableGroups = groups
+    .map((g) => ({
+      ...g,
+      questions: g.questions.filter((q) => selected.has(q.levelId)),
+    }))
+    .filter((g) => g.questions.length > 0 && mapping[g.fileVariable]);
+  const selectedRunCount = runnableGroups.reduce(
+    (n, g) => n + g.questions.length,
+    0,
+  );
 
   function run() {
     // Persist the assessor's effective picks so reopening restores them.
     onPersistMapping?.(mapping);
     setAccepted(new Set());
     setPhase('review');
-    populate.mutate({ groups, mapping });
+    populate.mutate({ groups: runnableGroups, mapping });
   }
 
   function acceptOne(s: AiSuggestion) {
@@ -342,6 +449,9 @@ export function AiPopulateDialog({
                 availableFiles={availableFiles}
                 mapping={mapping}
                 onSetVar={setVar}
+                selected={selected}
+                answeredLevelIds={answeredLevelIds}
+                onToggleQuestion={toggleQuestion}
               />
             ) : (
               <>
@@ -379,14 +489,15 @@ export function AiPopulateDialog({
                     )}
                     {suggestions.length === 0 ? (
                       <div className={styles.empty}>
-                        The assistant couldn’t confidently answer any of the open
-                        questions from the mapped files.
+                        The assistant couldn’t confidently answer any of the mapped
+                        questions from those files.
                       </div>
                     ) : (
                       <div className={styles.list}>
                         {suggestions.map((s) => {
                           const level = levelById.get(s.levelId);
                           const isAccepted = accepted.has(s.levelId);
+                          const willOverwrite = answeredLevelIds.has(s.levelId);
                           const dataType = (level?.dnx_data_type ?? 3) as DataType;
                           return (
                             <div
@@ -397,6 +508,11 @@ export function AiPopulateDialog({
                                 <div className={styles.qBlock}>
                                   <span className={styles.qLabel}>
                                     {level?.dnx_name ?? 'Question'}
+                                    {willOverwrite && !isAccepted && (
+                                      <span className={styles.overwriteTag}>
+                                        replaces current answer
+                                      </span>
+                                    )}
                                   </span>
                                   <span className={styles.qValue}>
                                     {displayValue(s.value, dataType)}
@@ -435,49 +551,67 @@ export function AiPopulateDialog({
           </DialogContent>
           <DialogActions>
             {phase === 'map' ? (
-              <>
-                <span className={styles.footerInfo}>
+              <div className={styles.footer}>
+                <div className={styles.footerBtns}>
+                  <Button
+                    className={styles.actionBtn}
+                    appearance="secondary"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className={styles.actionBtn}
+                    appearance="primary"
+                    onClick={run}
+                    disabled={selectedRunCount === 0}
+                  >
+                    {selectedRunCount > 0 ? `Run on ${selectedRunCount}` : 'Run'}
+                  </Button>
+                </div>
+                <span className={styles.footerStatus}>
                   {groups.length === 0
-                    ? 'No file variables declared on this template.'
-                    : `${mappedCount} of ${groups.length} mapped`}
+                    ? 'No AI bindings on this template.'
+                    : `${mappedCount}/${groups.length} files mapped · ${selectedRunCount} question${selectedRunCount === 1 ? '' : 's'} selected`}
                 </span>
-                <Button appearance="secondary" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  appearance="primary"
-                  onClick={run}
-                  disabled={mappedCount === 0}
-                >
-                  Run auto-fill
-                </Button>
-              </>
+              </div>
             ) : (
-              <>
+              <div className={styles.footer}>
+                <div className={styles.footerBtns}>
+                  {!populate.isPending && (
+                    <Button
+                      className={styles.actionBtn}
+                      appearance="secondary"
+                      icon={<ArrowClockwise16Regular />}
+                      onClick={() => setPhase('map')}
+                    >
+                      Back
+                    </Button>
+                  )}
+                  {remaining > 0 && (
+                    <Button
+                      className={styles.actionBtn}
+                      appearance="primary"
+                      onClick={acceptAll}
+                    >
+                      Accept all ({remaining})
+                    </Button>
+                  )}
+                  <Button
+                    className={styles.actionBtn}
+                    appearance="secondary"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    {accepted.size > 0 ? 'Done' : 'Close'}
+                  </Button>
+                </div>
                 {populate.data && suggestions.length > 0 && (
-                  <span className={styles.footerInfo}>
+                  <span className={styles.footerStatus}>
                     {suggestions.length} suggestion{suggestions.length === 1 ? '' : 's'} ·{' '}
                     {accepted.size} applied
                   </span>
                 )}
-                {!populate.isPending && (
-                  <Button
-                    appearance="secondary"
-                    icon={<ArrowClockwise16Regular />}
-                    onClick={() => setPhase('map')}
-                  >
-                    Back to mapping
-                  </Button>
-                )}
-                {remaining > 0 && (
-                  <Button appearance="primary" onClick={acceptAll}>
-                    Accept all ({remaining})
-                  </Button>
-                )}
-                <Button appearance="secondary" onClick={() => onOpenChange(false)}>
-                  {accepted.size > 0 ? 'Done' : 'Close'}
-                </Button>
-              </>
+              </div>
             )}
           </DialogActions>
         </DialogBody>
@@ -486,7 +620,7 @@ export function AiPopulateDialog({
   );
 }
 
-/** Phase 1: bind each declared file variable to a real uploaded file. */
+/** Phase 1: map each file variable to an upload + pick which questions to run. */
 function MapPhase({
   styles,
   groups,
@@ -494,6 +628,9 @@ function MapPhase({
   availableFiles,
   mapping,
   onSetVar,
+  selected,
+  answeredLevelIds,
+  onToggleQuestion,
 }: {
   styles: ReturnType<typeof useStyles>;
   groups: FileVariableGroup[];
@@ -501,21 +638,29 @@ function MapPhase({
   availableFiles: string[];
   mapping: Record<string, string>;
   onSetVar: (variable: string, file: string) => void;
+  selected: Set<string>;
+  answeredLevelIds: Set<string>;
+  onToggleQuestion: (levelId: string) => void;
 }) {
   if (groups.length === 0) {
+    // Nothing to map: no question carries a file variable. (Answered / hidden
+    // questions ARE offered now, so the only empty reason left is "none bound".)
     return (
       <div className={styles.empty}>
-        None of the open questions declare an evidence file variable. Add one in the
-        template editor (under a question’s “AI auto-fill” section) to use this.
+        No questions on this template have an AI binding yet. Open the template in the
+        editor and add one in the <b>AI conditioning</b> tab — give the question a{' '}
+        <b>file variable</b> (a query alone isn’t enough to map a file).
       </div>
     );
   }
   return (
     <>
       <div className={styles.sub}>
-        Map each evidence file this template expects to one of your uploaded files.
+        Map each evidence file to one of your uploads, then tick the questions to run.
+        Only ticked questions are sent to the assistant — already-answered ones are
+        unticked by default so they aren’t re-queried.
         {unboundCount > 0 &&
-          ` (${unboundCount} open question${unboundCount === 1 ? '' : 's'} have no file variable and will be skipped.)`}
+          ` (${unboundCount} question${unboundCount === 1 ? '' : 's'} have no file variable and are skipped.)`}
       </div>
       {availableFiles.length === 0 && (
         <MessageBar intent="warning" style={{ marginBottom: 12 }}>
@@ -527,35 +672,58 @@ function MapPhase({
       )}
       <div className={styles.mapList}>
         {groups.map((g) => {
-          const selected = mapping[g.fileVariable] ?? NO_FILE;
+          const picked = mapping[g.fileVariable] ?? NO_FILE;
+          const isMapped = picked !== NO_FILE;
           return (
-            <div key={g.fileVariable} className={styles.mapRow}>
-              <div className={styles.mapInfo}>
-                <span className={styles.mapVar}>
-                  <Document16Regular />
-                  {g.fileVariable}
-                </span>
-                <span className={styles.mapCount}>
-                  drives {g.questions.length} question
-                  {g.questions.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <Dropdown
-                className={styles.mapDropdown}
-                value={selected === NO_FILE ? 'Not mapped' : selected}
-                selectedOptions={[selected]}
-                onOptionSelect={(_, d) => onSetVar(g.fileVariable, d.optionValue ?? NO_FILE)}
-                placeholder="Choose a file…"
-              >
-                <Option value={NO_FILE} text="Not mapped">
-                  Not mapped
-                </Option>
-                {availableFiles.map((f) => (
-                  <Option key={f} value={f} text={f}>
-                    {f}
+            <div key={g.fileVariable} className={styles.mapGroup}>
+              <div className={styles.mapRow}>
+                <div className={styles.mapInfo}>
+                  <span className={styles.mapVar}>
+                    <Document16Regular />
+                    {g.fileVariable}
+                  </span>
+                  <span className={styles.mapCount}>
+                    {g.questions.length} question{g.questions.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <Dropdown
+                  className={styles.mapDropdown}
+                  value={picked === NO_FILE ? 'Not mapped' : picked}
+                  selectedOptions={[picked]}
+                  onOptionSelect={(_, d) => onSetVar(g.fileVariable, d.optionValue ?? NO_FILE)}
+                  placeholder="Choose a file…"
+                >
+                  <Option value={NO_FILE} text="Not mapped">
+                    Not mapped
                   </Option>
+                  {availableFiles.map((f) => (
+                    <Option key={f} value={f} text={f}>
+                      {f}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </div>
+              {/* Per-question selection — disabled until the variable is mapped,
+                  since an unmapped variable's questions can't be run anyway. */}
+              <div className={styles.qPickList}>
+                {g.questions.map((q) => (
+                  <Checkbox
+                    key={q.levelId}
+                    className={styles.qPick}
+                    checked={selected.has(q.levelId)}
+                    disabled={!isMapped}
+                    onChange={() => onToggleQuestion(q.levelId)}
+                    label={
+                      <span className={styles.qPickLabel}>
+                        {q.label}
+                        {answeredLevelIds.has(q.levelId) && (
+                          <span className={styles.qPickAnswered}>answered</span>
+                        )}
+                      </span>
+                    }
+                  />
                 ))}
-              </Dropdown>
+              </div>
             </div>
           );
         })}

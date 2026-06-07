@@ -21,6 +21,7 @@ import { Dnx_assessment_templatesstatuscode } from '../../generated/models/Dnx_a
 import { lookupName } from '../../lib/dataverse';
 import { LevelTree } from './levels/LevelTree';
 import { ScoringMatrix } from '../rules/ScoringMatrix';
+import { AiConditioningMatrix } from './levels/AiConditioningMatrix';
 
 const useStyles = makeStyles({
   backLink: {
@@ -187,10 +188,11 @@ export function TemplateEditorPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const { data: template, isLoading, error } = useTemplate(templateId);
   const publish = usePublishTemplate(templateId ?? '');
-  // Two views over the same template — Structure (tree authoring) vs
-  // Scoring (one row per level, inline rule editing). Tab state is local
-  // since it doesn't survive page reloads — fine for now.
-  const [tab, setTab] = useState<'structure' | 'scoring'>('structure');
+  // Three views over the same template — Structure (tree authoring), Scoring
+  // (one row per level, inline rule editing), and AI conditioning (one row per
+  // question, inline evidence-binding editing). Tab state is local since it
+  // doesn't survive page reloads — fine for now.
+  const [tab, setTab] = useState<'structure' | 'scoring' | 'ai'>('structure');
 
   if (isLoading) return <Spinner label="Loading template..." />;
   if (error) {
@@ -343,12 +345,21 @@ export function TemplateEditorPage() {
         >
           Scoring & evaluation
         </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'ai' ? styles.tabActive : ''}`}
+          onClick={() => setTab('ai')}
+        >
+          AI conditioning
+        </button>
       </div>
 
       {tab === 'structure' ? (
         <LevelTree templateId={template.dnx_assessment_templateid} />
-      ) : (
+      ) : tab === 'scoring' ? (
         <ScoringMatrix templateId={template.dnx_assessment_templateid} />
+      ) : (
+        <AiConditioningMatrix templateId={template.dnx_assessment_templateid} />
       )}
     </div>
   );

@@ -42,7 +42,7 @@ import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree } from '../templates/levels/treeBuilder';
 import { useCriteriaForLevels } from '../rules/api';
 import { evaluateAssessment, findRootCriteria } from '../rules/engine';
-import { indexResponses, isQuestionVisible, hasAnswer } from './responseHelpers';
+import { indexResponses, hasAnswer } from './responseHelpers';
 import type { EvaluationOutcome } from '../rules/types';
 import { AiPopulateDialog, type AcceptedSuggestion } from '../evidence/AiPopulateDialog';
 import { useEvidenceFiles } from '../evidence/api';
@@ -381,18 +381,22 @@ export function AssessmentPage() {
       )
     : { kind: 'not-evaluable', reason: 'no-children' };
 
-  // Questions the AI should attempt: visible Question-type levels that have no
-  // answer yet. Offering only the open ones keeps the prompt small and avoids
-  // the model overwriting answers the assessor already gave. The level map is
-  // needed for the visibility check.
-  const levelsById = new Map(
-    (levels ?? []).map((l) => [l.dnx_assessment_levelid, l] as const),
+  // Questions the AI should attempt: ALL Question-type levels. We deliberately
+  // do NOT filter by answered or visible state here — the assessor can re-fill
+  // an already-answered question, and a question hidden by a visibility rule on
+  // screen can still be answered from evidence. The review step lets them pick
+  // which proposals to apply, so offering everything is safe. The dialog itself
+  // narrows to questions that carry a file variable (via groupByFileVariable).
+  const aiQuestions: Dnx_assessment_levels[] = (levels ?? []).filter(
+    (l) => (l.dnx_assessment_level_type as LevelType) === 3,
   );
-  const unansweredQuestions: Dnx_assessment_levels[] = (levels ?? []).filter((l) => {
-    if ((l.dnx_assessment_level_type as LevelType) !== 3) return false;
-    if (!isQuestionVisible(l, levelsById, responsesByLevelId)) return false;
-    return !hasAnswer(responsesByLevelId.get(l.dnx_assessment_levelid));
-  });
+  // Level ids that already have an answer — passed to the dialog so the review
+  // list can flag "accepting will overwrite the current answer".
+  const answeredLevelIds = new Set(
+    aiQuestions
+      .filter((l) => hasAnswer(responsesByLevelId.get(l.dnx_assessment_levelid)))
+      .map((l) => l.dnx_assessment_levelid),
+  );
 
   // Persist one accepted suggestion through the normal upsert path so autosave,
   // version bump, and the AI badge all flow through the same code. The `ai`
@@ -648,7 +652,8 @@ export function AssessmentPage() {
         open={aiOpen}
         onOpenChange={setAiOpen}
         assessmentName={assessment.dnx_assessment_name}
-        questions={unansweredQuestions}
+        questions={aiQuestions}
+        answeredLevelIds={answeredLevelIds}
         availableFiles={(evidenceFiles ?? []).map((f) => f.fileName)}
         persistedMappingJson={assessment.dnx_evidence_mapping}
         onPersistMapping={(mapping) => saveMapping.mutate(mapping)}
