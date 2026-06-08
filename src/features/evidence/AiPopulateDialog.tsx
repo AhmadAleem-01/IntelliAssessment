@@ -63,11 +63,12 @@ const useStyles = makeStyles({
     paddingRight: '4px',
   },
   // A variable group: the file-mapping header row + its question checklist.
+  // No `overflow: hidden` here — it clips the question checklist. The inner
+  // `qPickList` carries its own rounded bottom corners instead.
   mapGroup: {
     border: '0.5px solid var(--color-border-tertiary)',
     borderRadius: 'var(--border-radius-md)',
     backgroundColor: 'var(--color-background-primary)',
-    overflow: 'hidden',
   },
   mapRow: {
     display: 'flex',
@@ -82,6 +83,8 @@ const useStyles = makeStyles({
     padding: '4px 14px 12px 14px',
     borderTop: '0.5px solid var(--color-border-tertiary)',
     backgroundColor: 'var(--color-background-secondary)',
+    borderBottomLeftRadius: 'var(--border-radius-md)',
+    borderBottomRightRadius: 'var(--border-radius-md)',
   },
   qPick: { fontSize: '13px' },
   qPickLabel: {

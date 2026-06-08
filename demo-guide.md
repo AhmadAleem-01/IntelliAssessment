@@ -8,10 +8,12 @@ A click-by-click script for showcasing IntelliAssessment V1 end-to-end. Designed
 
 1. Start the app: `npm run dev` (or open the Code App from inside the Model-Driven host).
 2. Navigate to **`/admin/seed`** in the address bar.
-3. Click **Run seed**. Wait for every step to turn green (~10–20 seconds).
+3. Click **Run full seed**. Wait for every step to turn green (~10–20 seconds).
 4. The page surfaces direct links to the demo project, template, and three assessments — keep them handy.
 
-If you re-run the seed, you'll get a second copy of everything. Clean up in the Power Apps maker portal if it gets cluttered.
+For the AI auto-fill demo, also click **Seed AI demo** on the same page — it creates a separate, leaner project + a blank assessment whose questions are AI-bound. See [§10](#10-ai-auto-fill-2-3-min) below and `demo-files/README.md`.
+
+If you re-run a seed, you'll get a second copy of everything. Clean up in the Power Apps maker portal if it gets cluttered.
 
 ---
 
@@ -125,6 +127,35 @@ Open the **Complete · Suitable** demo assessment. Click **View letter** in the 
 - Letter renders with candidate, project, template, outcome block (green Suitable), reviewer notes panel, and per-section responses (only questions flagged `include_in_letter` show up).
 - Click **Download PDF** → instant `.pdf` download via `html2canvas` + `jsPDF`. No print dialog.
 
+### 10. AI auto-fill (2–3 min)
+
+This is the headline AI feature. Uses the **separate** AI demo dataset — make sure you clicked **Seed AI demo** in setup.
+
+**Prep the evidence files (once):**
+
+- The repo has `demo-files/` with three Markdown documents for one fictional candidate (**Alex Carter**): `id-document.md`, `academic-transcript.md`, `candidate-resume.md`.
+- Convert each to PDF (open → **Print → Save as PDF**) — Azure Document Intelligence reads PDFs/images best. Keep recognisable names. See `demo-files/README.md` for the full crib sheet of expected answers.
+
+**Show the authoring side first (optional, 30 s):**
+
+- Open the AI demo template → **AI conditioning** tab. Each question is a row showing its **file variable** chip (`id-document`, `academic-transcript`, `candidate-resume`) + the extraction query. Section/subsection group headers give the hierarchy. Expand a row to show the inline file-variable + query editor.
+
+Talking point: *"The template author declares, per question, which evidence file answers it and how — without knowing the real upload names. Those are mapped at assessment time."*
+
+**Run the auto-fill (the main act):**
+
+1. Open **AI Demo — Alex Carter**.
+2. In **Evidence files**, upload the three PDFs.
+3. Click **AI auto-fill** (header button). **Phase 1 — Map:**
+   - Each declared file variable is listed with a file dropdown — a name-match best guess pre-fills it. Map `id-document` → the ID PDF, `academic-transcript` → the transcript, `candidate-resume` → the resume.
+   - Under each variable, a **per-question checklist** — tick the ones to run. (Already-answered questions start unticked so the AI is queried as little as possible; here everything's blank so all are ticked.)
+   - The footer shows "N files mapped · N questions selected". Click **Run on N**.
+4. **Phase 2 — Review:** one extraction per file + one batched AI call per file variable. Proposals come back with green/amber/red **confidence chips** and a one-line rationale. Sanity-check against `demo-files/README.md` (e.g. Full name → *Alex Carter*, Holds a bachelor's degree → *Yes*, Years → *5+ years*).
+5. **Accept all** (or accept individually). The dialog closes; the checklist now shows each answer with an **AI · N%** badge.
+6. Edit one AI answer by hand → the badge disappears (it flips to a manual override).
+
+Talking point: *"One LLM call per evidence file, not per question — the author's per-question instruction rides along in the prompt. Nothing is written until the assessor accepts, and the mapping is saved on the instance so re-opening restores it."*
+
 ---
 
 ## Feature checklist
@@ -143,6 +174,8 @@ Use this if you only have time for one screen each:
 - [ ] Comments drawer — threads + question tagging + scroll-to-question
 - [ ] Version history drawer — filter by reason + Compare diff + JSON download
 - [ ] Outcome letter — one-click PDF download
+- [ ] AI conditioning tab — per-question file variable + extraction query
+- [ ] AI auto-fill — map file variables → uploads, per-question selection, confidence-scored review, Accept all, AI badge
 
 ---
 
@@ -159,3 +192,5 @@ To remove demo data after the demo:
 7. Delete the demo template + project.
 
 Or re-seed twice and only delete the *original* demo project + cascade — Dataverse will refuse if there are dangling lookups, prompting you to remove children first.
+
+The **AI demo** ("RPL — AI Auto-fill (Demo)") cleans up the same way: delete its responses → its levels' criteria → the levels → template → project. Also remove the evidence files you uploaded from the assessment's SharePoint folder.

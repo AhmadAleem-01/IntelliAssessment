@@ -13,6 +13,7 @@ import {
   Sparkle16Filled,
 } from '@fluentui/react-icons';
 import { seedDemo, type SeedStep, type SeedResult } from './seedDemo';
+import { seedAiDemo, type AiSeedResult } from './seedAiDemo';
 
 const useStyles = makeStyles({
   root: {
@@ -140,21 +141,22 @@ export function SeedDemoPage() {
   const styles = useStyles();
   const [steps, setSteps] = useState<SeedStep[]>([]);
   const [result, setResult] = useState<SeedResult | null>(null);
+  const [aiResult, setAiResult] = useState<AiSeedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState<null | 'full' | 'ai'>(null);
 
-  async function handleRun() {
-    setRunning(true);
+  /** Shared runner for both seeders — same step-streaming + error handling. */
+  async function run<T>(kind: 'full' | 'ai', fn: (p: typeof setSteps) => Promise<T>, onDone: (r: T) => void) {
+    setRunning(kind);
     setError(null);
     setResult(null);
+    setAiResult(null);
     setSteps([]);
     try {
-      const out = await seedDemo(setSteps);
-      setResult(out);
+      onDone(await fn(setSteps));
     } catch (e) {
-      console.error('[seedDemo] failed', e);
+      console.error('[seed] failed', e);
       setError((e as Error).message);
-      // Mark any currently-pending step as error so the failure has a visible home.
       setSteps((prev) => {
         const idx = prev.findIndex((s) => s.status === 'pending');
         if (idx < 0) return prev;
@@ -163,7 +165,7 @@ export function SeedDemoPage() {
         return copy;
       });
     } finally {
-      setRunning(false);
+      setRunning(null);
     }
   }
 
@@ -174,10 +176,13 @@ export function SeedDemoPage() {
           <Database20Regular /> Seed demo data
         </h1>
         <div className={styles.subtitle}>
-          One-click loader that creates a project, a rich template with rules at
-          every cascade tier, and three assessments at varied states (Draft,
-          In&nbsp;progress with a reviewer flag, Complete + Suitable). Designed
-          for screenshots and live walkthroughs.
+          <b>Run full seed</b> — a project, a rich template with rules at every
+          cascade tier, and three assessments at varied states (Draft,
+          In&nbsp;progress with a reviewer flag, Complete + Suitable).
+          <br />
+          <b>Seed AI demo</b> — a leaner project whose questions each carry an AI
+          evidence binding, plus a blank assessment ready for the auto-fill
+          walkthrough. Pair it with the documents in <code>demo-files/</code>.
         </div>
       </div>
 
@@ -189,14 +194,24 @@ export function SeedDemoPage() {
       </div>
 
       <div className={styles.card}>
-        <Button
-          className={styles.runBtn}
-          icon={<Sparkle16Filled />}
-          disabled={running}
-          onClick={handleRun}
-        >
-          {running ? 'Seeding…' : 'Run seed'}
-        </Button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button
+            className={styles.runBtn}
+            icon={<Sparkle16Filled />}
+            disabled={running !== null}
+            onClick={() => run('full', seedDemo, setResult)}
+          >
+            {running === 'full' ? 'Seeding…' : 'Run full seed'}
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<Sparkle16Filled />}
+            disabled={running !== null}
+            onClick={() => run('ai', seedAiDemo, setAiResult)}
+          >
+            {running === 'ai' ? 'Seeding…' : 'Seed AI demo'}
+          </Button>
+        </div>
 
         {error && (
           <MessageBar intent="error" style={{ marginTop: 14 }}>
@@ -224,7 +239,7 @@ export function SeedDemoPage() {
                     />
                   ) : s.status === 'error' ? (
                     <ErrorCircle16Filled style={{ color: 'var(--color-red-text)' }} />
-                  ) : running ? (
+                  ) : running !== null ? (
                     <span className={styles.spinDot} />
                   ) : (
                     <span className={styles.stepBullet} />
@@ -258,6 +273,33 @@ export function SeedDemoPage() {
                 → Open demo assessment {i + 1}
               </Link>
             ))}
+          </div>
+        )}
+
+        {aiResult && (
+          <div className={styles.resultLinks}>
+            <MessageBar intent="success" style={{ marginTop: 16 }}>
+              <MessageBarBody>
+                AI demo seeded. Upload the files in <code>demo-files/</code> to the
+                assessment’s evidence area, then run AI auto-fill and map these file
+                variables: {aiResult.fileVariables.join(', ')}.
+              </MessageBarBody>
+            </MessageBar>
+            <Link
+              className={styles.resultLink}
+              to={`/assessments/${aiResult.instanceId}`}
+            >
+              → Open the AI demo assessment (upload evidence → AI auto-fill)
+            </Link>
+            <Link
+              className={styles.resultLink}
+              to={`/templates/${aiResult.templateId}/edit`}
+            >
+              → Open the AI demo template (AI conditioning tab shows the bindings)
+            </Link>
+            <Link className={styles.resultLink} to={`/projects/${aiResult.projectId}`}>
+              → Open the AI demo project
+            </Link>
           </div>
         )}
       </div>
