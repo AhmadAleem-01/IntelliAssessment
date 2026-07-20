@@ -284,8 +284,16 @@ function responseColumns(
       };
     case 3: // Text
       return { ...blank, dnx_response_text: String(value) };
-    case 4: // Date — date-only (YYYY-MM-DD), see gotcha B
-      return { ...blank, dnx_response_date: typeof value === 'string' ? value.slice(0, 10) : undefined };
+    case 4: {
+      // Date — date-only (YYYY-MM-DD), see gotcha B. An empty / whitespace
+      // string means the assessor cleared the picker; `Edm.Date` rejects '',
+      // so send null to clear the column rather than an empty literal.
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      return {
+        ...blank,
+        dnx_response_date: trimmed ? trimmed.slice(0, 10) : null,
+      } as Partial<Dnx_assessment_responsesBase>;
+    }
   }
 }
 
