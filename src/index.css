@@ -184,3 +184,20 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Answer-reference chip inside the letter builder's content-editable fields.
+   Injected via innerHTML (not Griffel), so it lives here as a global class. */
+.tok-chip {
+  display: inline-block;
+  padding: 0 7px;
+  margin: 0 1px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--color-purple-soft);
+  color: var(--color-purple-text);
+  border: 0.5px solid var(--color-purple);
+  vertical-align: baseline;
+}

@@ -88,7 +88,15 @@
           "x-ms-dataverse-attribute": "dnx_description",
           "x-ms-dataverse-type": "StringType",
           "x-ms-schema-name": "dnx_Description",
-          "maxLength": 100
+          "maxLength": 3000
+        },
+        "dnx_letter_template_json": {
+          "type": "string",
+          "title": "Letter Template JSON",
+          "x-ms-dataverse-attribute": "dnx_letter_template_json",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "dnx_letter_template_json",
+          "maxLength": 1048567
         },
         "dnx_published_on": {
           "type": "string",

@@ -22,6 +22,7 @@ import { lookupName } from '../../lib/dataverse';
 import { LevelTree } from './levels/LevelTree';
 import { ScoringMatrix } from '../rules/ScoringMatrix';
 import { AiConditioningMatrix } from './levels/AiConditioningMatrix';
+import { LetterBuilder } from '../letter/LetterBuilder';
 
 const useStyles = makeStyles({
   backLink: {
@@ -188,11 +189,10 @@ export function TemplateEditorPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const { data: template, isLoading, error } = useTemplate(templateId);
   const publish = usePublishTemplate(templateId ?? '');
-  // Three views over the same template — Structure (tree authoring), Scoring
-  // (one row per level, inline rule editing), and AI conditioning (one row per
-  // question, inline evidence-binding editing). Tab state is local since it
-  // doesn't survive page reloads — fine for now.
-  const [tab, setTab] = useState<'structure' | 'scoring' | 'ai'>('structure');
+  // Views over the same template — Structure (tree authoring), Scoring (rule
+  // editing), AI conditioning (evidence bindings), and Letter (outcome-letter
+  // designer). Tab state is local since it doesn't survive page reloads.
+  const [tab, setTab] = useState<'structure' | 'scoring' | 'ai' | 'letter'>('structure');
 
   if (isLoading) return <Spinner label="Loading template..." />;
   if (error) {
@@ -352,14 +352,23 @@ export function TemplateEditorPage() {
         >
           AI conditioning
         </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'letter' ? styles.tabActive : ''}`}
+          onClick={() => setTab('letter')}
+        >
+          Letter
+        </button>
       </div>
 
       {tab === 'structure' ? (
         <LevelTree templateId={template.dnx_assessment_templateid} />
       ) : tab === 'scoring' ? (
         <ScoringMatrix templateId={template.dnx_assessment_templateid} />
-      ) : (
+      ) : tab === 'ai' ? (
         <AiConditioningMatrix templateId={template.dnx_assessment_templateid} />
+      ) : (
+        <LetterBuilder templateId={template.dnx_assessment_templateid} />
       )}
     </div>
   );

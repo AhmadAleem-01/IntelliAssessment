@@ -19,6 +19,7 @@ export type Dnx_assessment_templatesstatuscode = keyof typeof Dnx_assessment_tem
 export interface Dnx_assessment_templatesBase {
   dnx_assessment_templateid: string;
   dnx_description?: string;
+  dnx_letter_template_json?: string;
   dnx_published_on?: string;
   dnx_template_name: string;
   dnx_template_version?: number;

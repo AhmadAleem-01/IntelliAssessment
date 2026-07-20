@@ -17,8 +17,10 @@ import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assess
 import { useTemplateLevels } from '../templates/levels/api';
 import { useAssessmentResponses } from '../assessments/api';
 import { useCriteriaForLevels } from '../rules/api';
+import { useTemplate } from '../templates/api';
 import { lookupId } from '../../lib/dataverse';
 import { LetterPreview } from './LetterPreview';
+import { parseLetterLayout } from './letterLayout';
 
 const useStyles = makeStyles({
   surface: {
@@ -72,6 +74,8 @@ export function LetterDialog({ assessment, trigger }: Props) {
   const { data: responses, isLoading: respLoading } = useAssessmentResponses(
     open ? instanceId : undefined,
   );
+  const { data: template } = useTemplate(open ? templateId ?? undefined : undefined);
+  const layout = parseLetterLayout(template?.dnx_letter_template_json);
   const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
 
@@ -152,6 +156,7 @@ export function LetterDialog({ assessment, trigger }: Props) {
                   levels={levels!}
                   responses={responses!}
                   criteriaByLevelId={criteriaByLevelId}
+                  layout={layout}
                 />
               </div>
             )}

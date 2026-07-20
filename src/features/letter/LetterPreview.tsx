@@ -8,6 +8,15 @@ import type { DataType, LevelType } from '../templates/levels/levelTypes';
 import { indexResponses, readResponseValue } from '../assessments/responseHelpers';
 import { evaluateAssessment, findRootCriteria } from '../rules/engine';
 import { lookupName } from '../../lib/dataverse';
+import {
+  DEFAULT_LAYOUT,
+  META_FIELD_LABEL,
+  resolveLetterHtml,
+  type LetterLayout,
+  type MetaFieldKey,
+  type PlaceholderValues,
+} from './letterLayout';
+import { sanitizeHtml } from './sanitizeHtml';
 
 const useStyles = makeStyles({
   // Letter is a fixed-width page so the printed PDF doesn't shift based on
@@ -183,6 +192,23 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'space-between',
   },
+  // --- authored blocks (M8b) ---
+  blockText: {
+    fontSize: '13px',
+    lineHeight: 1.6,
+    color: '#1a1a1a',
+    whiteSpace: 'pre-wrap',
+    marginBottom: '16px',
+  },
+  signature: {
+    fontSize: '12px',
+    lineHeight: 1.5,
+    color: '#444',
+    whiteSpace: 'pre-wrap',
+    marginTop: '24px',
+    paddingTop: '12px',
+    borderTop: '1px solid #e3e3e3',
+  },
 });
 
 interface Props {
@@ -190,6 +216,8 @@ interface Props {
   levels: Dnx_assessment_levels[];
   responses: Dnx_assessment_responses[];
   criteriaByLevelId: Map<string, Criteria> | undefined;
+  /** Author-defined block layout. Falls back to DEFAULT_LAYOUT when omitted. */
+  layout?: LetterLayout;
 }
 
 /**
@@ -206,8 +234,10 @@ export function LetterPreview({
   levels,
   responses,
   criteriaByLevelId,
+  layout,
 }: Props) {
   const styles = useStyles();
+  const blocks = (layout ?? DEFAULT_LAYOUT).blocks;
   const tree = buildTree(levels);
   const responsesByLevelId = indexResponses(responses);
   const rootCriteria = findRootCriteria(levels, criteriaByLevelId);
@@ -267,98 +297,180 @@ export function LetterPreview({
     }))
     .filter((s) => s.directQuestions.length > 0 || s.subsections.length > 0);
 
+  // Placeholder values for heading / text / signature blocks.
+  const values: PlaceholderValues = {
+    candidate: candidateName ?? '—',
+    assessment: assessment.dnx_assessment_name,
+    project: projectName ?? '—',
+    template: templateName ?? '—',
+    outcome: outcomeLabel,
+    submittedOn: submittedOn ?? '—',
+    today,
+    version: String(assessment.dnx_version ?? 1),
+  };
+  // Every question's formatted answer, keyed by level id — powers the inline
+  // {{q:<levelId>|name}} answer tokens in heading / text / signature blocks.
+  // Covers ALL questions (not just include_in_letter ones), since an author may
+  // reference any answer in prose.
+  const answerByLevelId: Record<string, string> = {};
+  for (const level of levels) {
+    if ((level.dnx_assessment_level_type as LevelType) !== 3) continue;
+    const dataType = (level.dnx_data_type ?? 3) as DataType;
+    const value = readResponseValue(
+      dataType,
+      responsesByLevelId.get(level.dnx_assessment_levelid),
+    );
+    answerByLevelId[level.dnx_assessment_levelid] = formatAnswer(value, dataType);
+  }
+
+  const metaValueFor = (key: MetaFieldKey): string => {
+    switch (key) {
+      case 'candidate':
+        return candidateName ?? '—';
+      case 'assessment':
+        return assessment.dnx_assessment_name;
+      case 'project':
+        return projectName ?? '—';
+      case 'template':
+        return templateName ?? '—';
+      case 'submittedOn':
+        return submittedOn ?? '—';
+      case 'today':
+        return today;
+      case 'version':
+        return `v${assessment.dnx_version ?? 1}`;
+    }
+  };
+
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div className={styles.brand}>IntelliAssessment</div>
-        <div className={styles.title}>Assessment outcome</div>
-        <div className={styles.metaGrid}>
-          <div>
-            <div className={styles.metaLabel}>Candidate</div>
-            <div className={styles.metaValue}>{candidateName ?? '—'}</div>
-          </div>
-          <div>
-            <div className={styles.metaLabel}>Assessment</div>
-            <div className={styles.metaValue}>{assessment.dnx_assessment_name}</div>
-          </div>
-          <div>
-            <div className={styles.metaLabel}>Project</div>
-            <div className={styles.metaValue}>{projectName ?? '—'}</div>
-          </div>
-          <div>
-            <div className={styles.metaLabel}>Template</div>
-            <div className={styles.metaValue}>{templateName ?? '—'}</div>
-          </div>
-          <div>
-            <div className={styles.metaLabel}>Submitted</div>
-            <div className={styles.metaValue}>{submittedOn ?? '—'}</div>
-          </div>
-          <div>
-            <div className={styles.metaLabel}>Letter issued</div>
-            <div className={styles.metaValue}>{today}</div>
-          </div>
-        </div>
+      {/* The brand strip is part of the page identity, always at the top. */}
+      <div className={styles.brand} style={{ marginBottom: 10 }}>
+        IntelliAssessment
       </div>
 
-      <div
-        className={`${styles.outcomeBlock} ${
-          outcomeKind === 'pass'
-            ? styles.outcomeBlockPass
-            : outcomeKind === 'fail'
-              ? styles.outcomeBlockFail
-              : styles.outcomeBlockPending
-        }`}
-      >
-        <div style={{ flex: 1 }}>
-          <div className={styles.outcomeLabel}>Outcome</div>
-          <div
-            className={`${styles.outcomeValue} ${
-              outcomeKind === 'pass'
-                ? styles.outcomeValuePass
-                : outcomeKind === 'fail'
-                  ? styles.outcomeValueFail
-                  : styles.outcomeValuePending
-            }`}
-          >
-            {outcomeLabel}
-          </div>
-          {liveOutcome.explanation && !persistedLabel && (
-            <div className={styles.outcomeExplanation}>{liveOutcome.explanation}</div>
-          )}
-        </div>
-      </div>
-
-      {notes && (
-        <div className={styles.reviewerNotes}>
-          <div className={styles.reviewerNotesLabel}>Reviewer notes</div>
-          <div className={styles.reviewerNotesBody}>{notes}</div>
-        </div>
-      )}
-
-      {sections.length === 0 ? (
-        <div className={styles.emptyHint}>
-          No questions marked "Include in outcome letter" — the letter has no
-          response detail. Toggle the flag on questions in the template editor
-          to surface their answers here.
-        </div>
-      ) : (
-        sections.map((s) => (
-          <div key={s.level.dnx_assessment_levelid} className={styles.section}>
-            <div className={styles.sectionTitle}>{s.level.dnx_name}</div>
-            {s.directQuestions.map((q) => (
-              <QuestionRow key={q.levelId} {...q} styles={styles} />
-            ))}
-            {s.subsections.map((sub) => (
-              <div key={sub.level.dnx_assessment_levelid} className={styles.subsection}>
-                <div className={styles.subsectionTitle}>{sub.level.dnx_name}</div>
-                {sub.questions.map((q) => (
-                  <QuestionRow key={q.levelId} {...q} styles={styles} />
-                ))}
+      {blocks.map((block) => {
+        switch (block.type) {
+          case 'heading':
+            return (
+              <div
+                key={block.id}
+                className={styles.title}
+                style={{ textAlign: block.align, marginBottom: 16 }}
+                dangerouslySetInnerHTML={{
+                  __html: resolveLetterHtml(block.text, values, answerByLevelId, sanitizeHtml),
+                }}
+              />
+            );
+          case 'text':
+            return (
+              <div
+                key={block.id}
+                className={styles.blockText}
+                dangerouslySetInnerHTML={{
+                  __html: resolveLetterHtml(block.text, values, answerByLevelId, sanitizeHtml),
+                }}
+              />
+            );
+          case 'signature':
+            return (
+              <div
+                key={block.id}
+                className={styles.signature}
+                dangerouslySetInnerHTML={{
+                  __html: resolveLetterHtml(block.text, values, answerByLevelId, sanitizeHtml),
+                }}
+              />
+            );
+          case 'spacer':
+            return <div key={block.id} style={{ height: block.size }} />;
+          case 'meta':
+            return (
+              <div key={block.id} className={styles.header}>
+                <div className={styles.metaGrid}>
+                  {block.fields.map((f) => (
+                    <div key={f}>
+                      <div className={styles.metaLabel}>{META_FIELD_LABEL[f]}</div>
+                      <div className={styles.metaValue}>{metaValueFor(f)}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        ))
-      )}
+            );
+          case 'outcome':
+            return (
+              <div
+                key={block.id}
+                className={`${styles.outcomeBlock} ${
+                  outcomeKind === 'pass'
+                    ? styles.outcomeBlockPass
+                    : outcomeKind === 'fail'
+                      ? styles.outcomeBlockFail
+                      : styles.outcomeBlockPending
+                }`}
+              >
+                <div style={{ flex: 1 }}>
+                  <div className={styles.outcomeLabel}>Outcome</div>
+                  <div
+                    className={`${styles.outcomeValue} ${
+                      outcomeKind === 'pass'
+                        ? styles.outcomeValuePass
+                        : outcomeKind === 'fail'
+                          ? styles.outcomeValueFail
+                          : styles.outcomeValuePending
+                    }`}
+                  >
+                    {outcomeLabel}
+                  </div>
+                  {liveOutcome.explanation && !persistedLabel && (
+                    <div className={styles.outcomeExplanation}>
+                      {liveOutcome.explanation}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          case 'reviewerNotes':
+            return notes ? (
+              <div key={block.id} className={styles.reviewerNotes}>
+                <div className={styles.reviewerNotesLabel}>Reviewer notes</div>
+                <div className={styles.reviewerNotesBody}>{notes}</div>
+              </div>
+            ) : null;
+          case 'responses':
+            return (
+              <div key={block.id}>
+                {sections.length === 0 ? (
+                  <div className={styles.emptyHint}>
+                    No questions marked "Include in outcome letter" — the letter has
+                    no response detail. Toggle the flag on questions in the template
+                    editor to surface their answers here.
+                  </div>
+                ) : (
+                  sections.map((s) => (
+                    <div key={s.level.dnx_assessment_levelid} className={styles.section}>
+                      <div className={styles.sectionTitle}>{s.level.dnx_name}</div>
+                      {s.directQuestions.map((q) => (
+                        <QuestionRow key={q.levelId} {...q} styles={styles} />
+                      ))}
+                      {s.subsections.map((sub) => (
+                        <div
+                          key={sub.level.dnx_assessment_levelid}
+                          className={styles.subsection}
+                        >
+                          <div className={styles.subsectionTitle}>{sub.level.dnx_name}</div>
+                          {sub.questions.map((q) => (
+                            <QuestionRow key={q.levelId} {...q} styles={styles} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+            );
+        }
+      })}
 
       <div className={styles.footer}>
         <span>Generated by IntelliAssessment</span>

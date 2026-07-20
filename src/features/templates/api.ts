@@ -109,6 +109,41 @@ export function useDeleteTemplate() {
   });
 }
 
+/**
+ * Persist the custom outcome-letter layout (M8b) into `dnx_letter_template_json`.
+ * Targeted PATCH of just that column so authoring the letter doesn't disturb
+ * the template's other fields. Patches the detail cache optimistically so the
+ * Letter tab + the letter dialog see the saved layout immediately. Pass the
+ * serialised JSON string (empty string to clear back to the default layout).
+ */
+export function useSaveLetterLayout(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (letterTemplateJson: string): Promise<void> => {
+      const r = await Dnx_assessment_templatesService.update(
+        id,
+        {
+          dnx_letter_template_json: letterTemplateJson,
+        } as Partial<Omit<Dnx_assessment_templatesBase, 'dnx_assessment_templateid'>>,
+      );
+      if (!r.success) {
+        console.error('[save letter layout] failed', r.error);
+        throw new Error(r.error?.message ?? 'Failed to save letter layout');
+      }
+    },
+    onSuccess: (_data, letterTemplateJson) => {
+      const cached = qc.getQueryData<Dnx_assessment_templates>(templateKeys.detail(id));
+      if (cached) {
+        qc.setQueryData<Dnx_assessment_templates>(templateKeys.detail(id), {
+          ...cached,
+          dnx_letter_template_json: letterTemplateJson,
+        });
+      }
+      qc.invalidateQueries({ queryKey: templateKeys.detail(id) });
+    },
+  });
+}
+
 /** Publish: flip status to Published and bump version + published_on timestamp. */
 export function usePublishTemplate(id: string) {
   const qc = useQueryClient();
