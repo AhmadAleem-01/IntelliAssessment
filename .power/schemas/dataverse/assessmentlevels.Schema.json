@@ -333,6 +333,14 @@
           "x-ms-read-only": true,
           "maxLength": 850
         },
+        "dnx_reason_code": {
+          "type": "string",
+          "title": "Reason Code",
+          "x-ms-dataverse-attribute": "dnx_reason_code",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "dnx_Reason_Code",
+          "maxLength": 1000
+        },
         "dnx_visibility_condition": {
           "type": "string",
           "title": "Visibility Condition",

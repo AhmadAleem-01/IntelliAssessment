@@ -209,6 +209,15 @@ const useStyles = makeStyles({
     paddingTop: '12px',
     borderTop: '1px solid #e3e3e3',
   },
+  reasonGroup: { marginTop: '10px', marginBottom: '12px', breakInside: 'avoid' },
+  reasonLabel: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#0d0d0d',
+    marginBottom: '4px',
+    paddingBottom: '3px',
+    borderBottom: '1px solid #e3e3e3',
+  },
 });
 
 interface Props {
@@ -469,6 +478,34 @@ export function LetterPreview({
                 )}
               </div>
             );
+          case 'groupedSubsections': {
+            const groups = buildGroupedSubsections(
+              tree,
+              block.sectionLevelId,
+              block.groupByQuestionName,
+              responsesByLevelId,
+            );
+            return groups.length === 0 ? null : (
+              <div key={block.id} className={styles.section}>
+                {block.heading && (
+                  <div className={styles.sectionTitle}>{block.heading}</div>
+                )}
+                {groups.map((g) => (
+                  <div key={g.groupValue} className={styles.reasonGroup}>
+                    <div className={styles.reasonLabel}>{g.groupValue}</div>
+                    {g.subsections.map((sub) => (
+                      <div key={sub.levelId} className={styles.subsection}>
+                        <div className={styles.subsectionTitle}>{sub.name}</div>
+                        {sub.questions.map((q) => (
+                          <QuestionRow key={q.levelId} {...q} styles={styles} />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            );
+          }
         }
       })}
 
@@ -510,6 +547,73 @@ function QuestionRow({
  * subsections — used so the Section-level pass picks up direct Questions
  * only, leaving the Subsection-level pass to handle nested ones.
  */
+/** One subsection with its letter-visible questions. */
+interface GroupedSubsection {
+  levelId: string;
+  name: string;
+  questions: CollectedQuestion[];
+}
+/** A group of subsections that share one answer value for the group-by question. */
+interface SubsectionGroup {
+  groupValue: string;
+  subsections: GroupedSubsection[];
+}
+
+/**
+ * Group a chosen Section's direct Subsections by the answer to a question
+ * that lives inside each of them (M8b.2 — "grouped subsections" block). Every
+ * subsection has its OWN instance of the group-by question (e.g. every
+ * "Qualification N" subsection has its own "Reason" question), so we match by
+ * NAME rather than by level id. Under each group value we carry the
+ * subsection's `include_in_letter` questions for detail. Subsections with no
+ * answer to the group-by question are skipped; first-seen order is preserved.
+ */
+function buildGroupedSubsections(
+  tree: LevelNode[],
+  sectionLevelId: string,
+  groupByQuestionName: string,
+  responsesByLevelId: ReturnType<typeof indexResponses>,
+): SubsectionGroup[] {
+  const questionName = groupByQuestionName.trim();
+  if (!sectionLevelId || !questionName) return [];
+  const section = tree.find((n) => n.level.dnx_assessment_levelid === sectionLevelId);
+  if (!section) return [];
+
+  const order: string[] = [];
+  const byValue = new Map<string, GroupedSubsection[]>();
+
+  for (const sub of section.children) {
+    if ((sub.level.dnx_assessment_level_type as LevelType) !== 2) continue;
+    // Find this subsection's group-by question (direct child, matched by name).
+    const groupQ = sub.children.find(
+      (c) =>
+        (c.level.dnx_assessment_level_type as LevelType) === 3 &&
+        c.level.dnx_name.trim() === questionName,
+    );
+    if (!groupQ) continue;
+    const dataType = (groupQ.level.dnx_data_type ?? 3) as DataType;
+    const value = readResponseValue(
+      dataType,
+      responsesByLevelId.get(groupQ.level.dnx_assessment_levelid),
+    );
+    const groupValue = formatAnswer(value, dataType);
+    if (!groupValue || groupValue === '—') continue;
+    if (!byValue.has(groupValue)) {
+      byValue.set(groupValue, []);
+      order.push(groupValue);
+    }
+    byValue.get(groupValue)!.push({
+      levelId: sub.level.dnx_assessment_levelid,
+      name: sub.level.dnx_name,
+      // This subsection's letter-visible questions (reuse collectIncluded;
+      // `includeAll` false = its direct questions only).
+      questions: collectIncluded(sub, false, responsesByLevelId),
+    });
+  }
+
+  return order.map((groupValue) => ({ groupValue, subsections: byValue.get(groupValue)! }));
+}
+
 function collectIncluded(
   node: LevelNode,
   includeAll: boolean,

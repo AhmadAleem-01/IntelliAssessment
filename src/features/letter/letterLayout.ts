@@ -19,6 +19,7 @@ export type LetterBlockType =
   | 'outcome'
   | 'reviewerNotes'
   | 'responses'
+  | 'groupedSubsections'
   | 'signature'
   | 'spacer';
 
@@ -73,6 +74,21 @@ export interface ResponsesBlock {
   id: string;
   type: 'responses';
 }
+export interface GroupedSubsectionsBlock {
+  id: string;
+  type: 'groupedSubsections';
+  /** Optional heading above the grouped subsections. */
+  heading: string;
+  /** Which Section's direct subsections to group. Empty = not configured yet. */
+  sectionLevelId: string;
+  /**
+   * Name of the question (present in each of that section's subsections)
+   * whose answer is the value to group by. Matched by NAME across sibling
+   * subsections — each has its own same-named instance of the question (e.g.
+   * every "Qualification N" subsection has its own "Reason" question).
+   */
+  groupByQuestionName: string;
+}
 export interface SignatureBlock {
   id: string;
   type: 'signature';
@@ -92,6 +108,7 @@ export type LetterBlock =
   | OutcomeBlock
   | ReviewerNotesBlock
   | ResponsesBlock
+  | GroupedSubsectionsBlock
   | SignatureBlock
   | SpacerBlock;
 
@@ -107,11 +124,16 @@ export const LETTER_BLOCK_LABEL: Record<LetterBlockType, string> = {
   outcome: 'Outcome',
   reviewerNotes: 'Reviewer notes',
   responses: 'Responses',
+  groupedSubsections: 'Grouped subsections',
   signature: 'Signature',
   spacer: 'Spacer',
 };
 
-/** Blocks that may only appear once — the palette disables them when present. */
+/**
+ * Blocks that may only appear once — the palette disables them when present.
+ * `groupedSubsections` is excluded: a letter may want several of these, one
+ * per section, each scoped + grouped differently.
+ */
 export const SINGLETON_BLOCKS: ReadonlySet<LetterBlockType> = new Set([
   'meta',
   'outcome',
@@ -277,6 +299,8 @@ export function makeBlock(type: LetterBlockType): LetterBlock {
       return { id, type };
     case 'responses':
       return { id, type };
+    case 'groupedSubsections':
+      return { id, type, heading: 'Grouped subsections', sectionLevelId: '', groupByQuestionName: '' };
     case 'signature':
       return { id, type, text: 'Issued by IntelliAssessment' };
     case 'spacer':
@@ -311,9 +335,11 @@ const VALID_TYPES: ReadonlySet<string> = new Set<LetterBlockType>([
   'outcome',
   'reviewerNotes',
   'responses',
+  'groupedSubsections',
   'signature',
   'spacer',
 ]);
+
 
 /**
  * Parse the stored JSON into a LetterLayout. Tolerant: bad JSON, missing
@@ -370,6 +396,14 @@ function coerceBlock(id: string, type: LetterBlockType, b: Record<string, unknow
       return { id, type, text: str(b.text, 'Issued by IntelliAssessment') };
     case 'spacer':
       return { id, type, size: typeof b.size === 'number' ? b.size : 16 };
+    case 'groupedSubsections':
+      return {
+        id,
+        type,
+        heading: str(b.heading, 'Grouped subsections'),
+        sectionLevelId: str(b.sectionLevelId, ''),
+        groupByQuestionName: str(b.groupByQuestionName, ''),
+      };
     case 'outcome':
     case 'reviewerNotes':
     case 'responses':

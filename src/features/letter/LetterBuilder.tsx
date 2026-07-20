@@ -4,6 +4,7 @@ import {
   Input,
   Checkbox,
   Combobox,
+  Dropdown,
   Option,
   Spinner,
   MessageBar,
@@ -199,9 +200,18 @@ export function LetterBuilder({ templateId }: Props) {
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
   const save = useSaveLetterLayout(templateId);
 
+  const tree = useMemo(() => buildTree(levels), [levels]);
   // Flat list of Question levels for the "Insert answer" picker — each with a
   // Section › Subsection breadcrumb so duplicate names are distinguishable.
-  const questionOptions = useMemo(() => flattenQuestions(buildTree(levels), []), [levels]);
+  const questionOptions = useMemo(() => flattenQuestions(tree, []), [tree]);
+  // Top-level Sections — the first picker on a "Grouped subsections" block.
+  const sectionOptions = useMemo(
+    () =>
+      tree
+        .filter((n) => (n.level.dnx_assessment_level_type as LevelType) === 1)
+        .map((n) => ({ levelId: n.level.dnx_assessment_levelid, name: n.level.dnx_name })),
+    [tree],
+  );
 
   const [layout, setLayout] = useState<LetterLayout | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -357,6 +367,8 @@ export function LetterBuilder({ templateId }: Props) {
                     block={block}
                     styles={styles}
                     questionOptions={questionOptions}
+                    tree={tree}
+                    sectionOptions={sectionOptions}
                     onChange={(patch) => updateBlock(block.id, patch)}
                     onRemove={() => removeBlock(block.id)}
                     onDuplicate={() => duplicateBlock(block.id)}
@@ -398,10 +410,17 @@ interface QuestionOption {
   path: string;
 }
 
+interface SectionOption {
+  levelId: string;
+  name: string;
+}
+
 interface BlockEditorProps {
   block: LetterBlock;
   styles: ReturnType<typeof useStyles>;
   questionOptions: QuestionOption[];
+  tree: LevelNode[];
+  sectionOptions: SectionOption[];
   onChange: (patch: Partial<LetterBlock>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
@@ -411,6 +430,8 @@ function BlockEditor({
   block,
   styles,
   questionOptions,
+  tree,
+  sectionOptions,
   onChange,
   onRemove,
   onDuplicate,
@@ -563,6 +584,62 @@ function BlockEditor({
             Renders every question flagged “Include in outcome letter”, grouped by section.
           </div>
         );
+      case 'groupedSubsections': {
+        const chosenSection = tree.find(
+          (n) => n.level.dnx_assessment_levelid === block.sectionLevelId,
+        );
+        const questionNames = chosenSection
+          ? subsectionQuestionNames([chosenSection])
+          : [];
+        return (
+          <>
+            <Input
+              value={block.heading}
+              onChange={(_, d) => onChange({ heading: d.value })}
+              placeholder="Heading (optional)"
+            />
+            <Dropdown
+              value={chosenSection?.level.dnx_name ?? ''}
+              selectedOptions={block.sectionLevelId ? [block.sectionLevelId] : []}
+              onOptionSelect={(_, d) =>
+                // Changing the section invalidates the previous question choice
+                // — it belonged to the old section's subsections.
+                onChange({ sectionLevelId: d.optionValue ?? '', groupByQuestionName: '' })
+              }
+              placeholder="Which section…"
+            >
+              {sectionOptions.map((s) => (
+                <Option key={s.levelId} value={s.levelId} text={s.name}>
+                  {s.name}
+                </Option>
+              ))}
+            </Dropdown>
+            <Dropdown
+              value={block.groupByQuestionName || ''}
+              selectedOptions={block.groupByQuestionName ? [block.groupByQuestionName] : []}
+              onOptionSelect={(_, d) =>
+                onChange({ groupByQuestionName: d.optionValue ?? '' })
+              }
+              placeholder="Group its subsections by which question…"
+              disabled={!chosenSection}
+            >
+              {questionNames.map((name) => (
+                <Option key={name} value={name} text={name}>
+                  {name}
+                </Option>
+              ))}
+            </Dropdown>
+            <div className={styles.fixedNote}>
+              Groups the chosen section’s subsections by their answer to the picked
+              question, and lists each subsection’s letter fields under its group.
+              {chosenSection && questionNames.length === 0 &&
+                ' (No subsection questions found in this section.)'}
+              {' '}This block only shows content on a real, answered assessment —
+              the preview here has no answers, so it renders blank.
+            </div>
+          </>
+        );
+      }
     }
   }
 }
@@ -612,6 +689,20 @@ function InsertAnswer({
 }
 
 /** Flatten the level tree to Question rows with a breadcrumb path. */
+/** Distinct names of Question levels that sit inside a Subsection — the
+ *  candidates for the reason-grouping question (matched by name across the
+ *  sibling qualification subsections). */
+function subsectionQuestionNames(tree: LevelNode[]): string[] {
+  const names = new Set<string>();
+  const walk = (node: LevelNode, inSubsection: boolean) => {
+    const type = node.level.dnx_assessment_level_type as LevelType;
+    if (inSubsection && type === 3) names.add(node.level.dnx_name);
+    node.children.forEach((c) => walk(c, inSubsection || type === 2));
+  };
+  tree.forEach((n) => walk(n, false));
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
 function flattenQuestions(nodes: LevelNode[], prefix: string[]): QuestionOption[] {
   const out: QuestionOption[] = [];
   for (const node of nodes) {
