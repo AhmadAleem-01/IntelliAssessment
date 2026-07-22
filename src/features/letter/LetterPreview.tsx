@@ -2,21 +2,20 @@ import { makeStyles } from '@fluentui/react-components';
 import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assessment_instancesModel';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { Dnx_assessment_responses } from '../../generated/models/Dnx_assessment_responsesModel';
-import type { Criteria, EvaluationOutcome } from '../rules/types';
-import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
-import type { DataType, LevelType } from '../templates/levels/levelTypes';
-import { indexResponses, readResponseValue } from '../assessments/responseHelpers';
-import { evaluateAssessment, findRootCriteria } from '../rules/engine';
-import { lookupName } from '../../lib/dataverse';
+import type { Criteria } from '../rules/types';
+import { indexResponses } from '../assessments/responseHelpers';
 import {
   DEFAULT_LAYOUT,
   META_FIELD_LABEL,
   resolveLetterHtml,
   type LetterLayout,
-  type MetaFieldKey,
-  type PlaceholderValues,
 } from './letterLayout';
 import { sanitizeHtml } from './sanitizeHtml';
+import {
+  buildLetterData,
+  buildGroupedSubsections,
+  type CollectedQuestion,
+} from './letterData';
 
 const useStyles = makeStyles({
   // Letter is a fixed-width page so the printed PDF doesn't shift based on
@@ -247,109 +246,19 @@ export function LetterPreview({
 }: Props) {
   const styles = useStyles();
   const blocks = (layout ?? DEFAULT_LAYOUT).blocks;
-  const tree = buildTree(levels);
   const responsesByLevelId = indexResponses(responses);
-  const rootCriteria = findRootCriteria(levels, criteriaByLevelId);
-  const liveOutcome: EvaluationOutcome = evaluateAssessment(
+  const {
     tree,
-    criteriaByLevelId,
-    responsesByLevelId,
-    rootCriteria,
-  );
-
-  // Prefer the persisted outcome over live preview when the assessment
-  // has been submitted or approved — the candidate's letter should
-  // reflect the recorded verdict, not "this is what it would be if you
-  // edited it now".
-  const persisted = assessment.dnx_outcome;
-  const persistedLabel =
-    persisted === 0 ? 'Suitable' : persisted === 1 ? 'Not suitable' : null;
-
-  const outcomeLabel =
-    persistedLabel ??
-    (liveOutcome.kind === 'pass'
-      ? 'Suitable'
-      : liveOutcome.kind === 'fail'
-        ? 'Not suitable'
-        : 'Pending');
-
-  const outcomeKind =
-    persisted === 0 || liveOutcome.kind === 'pass'
-      ? 'pass'
-      : persisted === 1 || liveOutcome.kind === 'fail'
-        ? 'fail'
-        : 'pending';
-
-  const projectName = lookupName(assessment, 'dnx_project');
-  const templateName = lookupName(assessment, 'dnx_assessmenttemplate');
-  const candidateName = lookupName(assessment, 'ownerid');
-
-  const submittedOn = assessment.dnx_submittedon
-    ? new Date(assessment.dnx_submittedon).toLocaleDateString()
-    : null;
-  const today = new Date().toLocaleDateString();
-  const notes = assessment.dnx_outcome_notes?.trim();
-
-  // Walk the tree once collecting all questions with include_in_letter +
-  // their resolved answer string. Returns a structured map for rendering.
-  const sections = tree
-    .map((sectionNode) => ({
-      level: sectionNode.level,
-      directQuestions: collectIncluded(sectionNode, false, responsesByLevelId),
-      subsections: sectionNode.children
-        .filter((c) => (c.level.dnx_assessment_level_type as LevelType) === 2)
-        .map((subNode) => ({
-          level: subNode.level,
-          questions: collectIncluded(subNode, true, responsesByLevelId),
-        }))
-        .filter((s) => s.questions.length > 0),
-    }))
-    .filter((s) => s.directQuestions.length > 0 || s.subsections.length > 0);
-
-  // Placeholder values for heading / text / signature blocks.
-  const values: PlaceholderValues = {
-    candidate: candidateName ?? '—',
-    assessment: assessment.dnx_assessment_name,
-    project: projectName ?? '—',
-    template: templateName ?? '—',
-    outcome: outcomeLabel,
-    submittedOn: submittedOn ?? '—',
-    today,
-    version: String(assessment.dnx_version ?? 1),
-  };
-  // Every question's formatted answer, keyed by level id — powers the inline
-  // {{q:<levelId>|name}} answer tokens in heading / text / signature blocks.
-  // Covers ALL questions (not just include_in_letter ones), since an author may
-  // reference any answer in prose.
-  const answerByLevelId: Record<string, string> = {};
-  for (const level of levels) {
-    if ((level.dnx_assessment_level_type as LevelType) !== 3) continue;
-    const dataType = (level.dnx_data_type ?? 3) as DataType;
-    const value = readResponseValue(
-      dataType,
-      responsesByLevelId.get(level.dnx_assessment_levelid),
-    );
-    answerByLevelId[level.dnx_assessment_levelid] = formatAnswer(value, dataType);
-  }
-
-  const metaValueFor = (key: MetaFieldKey): string => {
-    switch (key) {
-      case 'candidate':
-        return candidateName ?? '—';
-      case 'assessment':
-        return assessment.dnx_assessment_name;
-      case 'project':
-        return projectName ?? '—';
-      case 'template':
-        return templateName ?? '—';
-      case 'submittedOn':
-        return submittedOn ?? '—';
-      case 'today':
-        return today;
-      case 'version':
-        return `v${assessment.dnx_version ?? 1}`;
-    }
-  };
+    outcomeLabel,
+    outcomeKind,
+    liveOutcome,
+    persistedLabel,
+    values,
+    answerByLevelId,
+    metaValueFor,
+    sections,
+    notes,
+  } = buildLetterData(assessment, levels, responses, criteriaByLevelId);
 
   return (
     <div className={styles.page}>
@@ -517,12 +426,6 @@ export function LetterPreview({
   );
 }
 
-interface CollectedQuestion {
-  levelId: string;
-  label: string;
-  answer: string;
-}
-
 function QuestionRow({
   label,
   answer,
@@ -541,120 +444,3 @@ function QuestionRow({
   );
 }
 
-/**
- * Walk a Section or Subsection node and pull out the questions flagged
- * `include_in_letter`. `descendOnly` controls whether to recurse into
- * subsections — used so the Section-level pass picks up direct Questions
- * only, leaving the Subsection-level pass to handle nested ones.
- */
-/** One subsection with its letter-visible questions. */
-interface GroupedSubsection {
-  levelId: string;
-  name: string;
-  questions: CollectedQuestion[];
-}
-/** A group of subsections that share one answer value for the group-by question. */
-interface SubsectionGroup {
-  groupValue: string;
-  subsections: GroupedSubsection[];
-}
-
-/**
- * Group a chosen Section's direct Subsections by the answer to a question
- * that lives inside each of them (M8b.2 — "grouped subsections" block). Every
- * subsection has its OWN instance of the group-by question (e.g. every
- * "Qualification N" subsection has its own "Reason" question), so we match by
- * NAME rather than by level id. Under each group value we carry the
- * subsection's `include_in_letter` questions for detail. Subsections with no
- * answer to the group-by question are skipped; first-seen order is preserved.
- */
-function buildGroupedSubsections(
-  tree: LevelNode[],
-  sectionLevelId: string,
-  groupByQuestionName: string,
-  responsesByLevelId: ReturnType<typeof indexResponses>,
-): SubsectionGroup[] {
-  const questionName = groupByQuestionName.trim();
-  if (!sectionLevelId || !questionName) return [];
-  const section = tree.find((n) => n.level.dnx_assessment_levelid === sectionLevelId);
-  if (!section) return [];
-
-  const order: string[] = [];
-  const byValue = new Map<string, GroupedSubsection[]>();
-
-  for (const sub of section.children) {
-    if ((sub.level.dnx_assessment_level_type as LevelType) !== 2) continue;
-    // Find this subsection's group-by question (direct child, matched by name).
-    const groupQ = sub.children.find(
-      (c) =>
-        (c.level.dnx_assessment_level_type as LevelType) === 3 &&
-        c.level.dnx_name.trim() === questionName,
-    );
-    if (!groupQ) continue;
-    const dataType = (groupQ.level.dnx_data_type ?? 3) as DataType;
-    const value = readResponseValue(
-      dataType,
-      responsesByLevelId.get(groupQ.level.dnx_assessment_levelid),
-    );
-    const groupValue = formatAnswer(value, dataType);
-    if (!groupValue || groupValue === '—') continue;
-    if (!byValue.has(groupValue)) {
-      byValue.set(groupValue, []);
-      order.push(groupValue);
-    }
-    byValue.get(groupValue)!.push({
-      levelId: sub.level.dnx_assessment_levelid,
-      name: sub.level.dnx_name,
-      // This subsection's letter-visible questions (reuse collectIncluded;
-      // `includeAll` false = its direct questions only).
-      questions: collectIncluded(sub, false, responsesByLevelId),
-    });
-  }
-
-  return order.map((groupValue) => ({ groupValue, subsections: byValue.get(groupValue)! }));
-}
-
-function collectIncluded(
-  node: LevelNode,
-  includeAll: boolean,
-  responsesByLevelId: ReturnType<typeof indexResponses>,
-): CollectedQuestion[] {
-  const out: CollectedQuestion[] = [];
-  for (const child of node.children) {
-    const childType = child.level.dnx_assessment_level_type as LevelType;
-    if (childType === 3) {
-      if (!child.level.dnx_include_in_letter) continue;
-      const dataType = (child.level.dnx_data_type ?? 3) as DataType;
-      const response = responsesByLevelId.get(child.level.dnx_assessment_levelid);
-      const value = readResponseValue(dataType, response);
-      out.push({
-        levelId: child.level.dnx_assessment_levelid,
-        label: child.level.dnx_name,
-        answer: formatAnswer(value, dataType),
-      });
-    } else if (childType === 2 && includeAll) {
-      out.push(...collectIncluded(child, true, responsesByLevelId));
-    }
-  }
-  return out;
-}
-
-function formatAnswer(
-  value: boolean | string | string[] | null,
-  dataType: DataType,
-): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (Array.isArray(value)) {
-    return value.length === 0 ? '—' : value.join(', ');
-  }
-  if (dataType === 4 && typeof value === 'string') {
-    // Date — already YYYY-MM-DD in storage; render as local date string.
-    try {
-      return new Date(value).toLocaleDateString();
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}

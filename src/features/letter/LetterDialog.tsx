@@ -10,7 +10,10 @@ import {
   Spinner,
   makeStyles,
 } from '@fluentui/react-components';
-import { ArrowDownload20Regular, DocumentText20Regular } from '@fluentui/react-icons';
+import {
+  ArrowDownload20Regular,
+  DocumentText20Regular,
+} from '@fluentui/react-icons';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assessment_instancesModel';
@@ -21,6 +24,7 @@ import { useTemplate } from '../templates/api';
 import { lookupId } from '../../lib/dataverse';
 import { LetterPreview } from './LetterPreview';
 import { parseLetterLayout } from './letterLayout';
+import { buildLetterDocxBlob } from './letterToDocx';
 
 const useStyles = makeStyles({
   surface: {
@@ -53,6 +57,14 @@ const useStyles = makeStyles({
   },
 });
 
+/** Shared download-filename slug — used by both the PDF and Word export. */
+function safeFileName(assessment: Dnx_assessment_instances): string {
+  return (assessment.dnx_assessment_name || 'assessment')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+}
+
 interface Props {
   assessment: Dnx_assessment_instances;
   trigger: React.ReactElement;
@@ -61,7 +73,7 @@ interface Props {
 export function LetterDialog({ assessment, trigger }: Props) {
   const styles = useStyles();
   const [open, setOpen] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState<null | 'pdf' | 'word'>(null);
   const letterRef = useRef<HTMLDivElement | null>(null);
   const templateId = lookupId(assessment, 'dnx_assessmenttemplate');
   const instanceId = assessment.dnx_assessment_instanceid;
@@ -91,7 +103,7 @@ export function LetterDialog({ assessment, trigger }: Props) {
    */
   async function handleDownload() {
     if (!letterRef.current || downloading) return;
-    setDownloading(true);
+    setDownloading('pdf');
     try {
       const canvas = await html2canvas(letterRef.current, {
         // 2× pixel density keeps text crisp on the PDF at A4 width.
@@ -126,15 +138,43 @@ export function LetterDialog({ assessment, trigger }: Props) {
         remaining -= pageHeightMm;
       }
 
-      const safeName = (assessment.dnx_assessment_name || 'assessment')
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .toLowerCase();
-      pdf.save(`outcome-letter-${safeName}.pdf`);
+      pdf.save(`outcome-letter-${safeFileName(assessment)}.pdf`);
     } catch (err) {
       console.error('[letter download] failed', err);
     } finally {
-      setDownloading(false);
+      setDownloading(null);
+    }
+  }
+
+  /**
+   * One-click Word (.docx) download. Unlike the PDF path, this doesn't
+   * rasterise the DOM — `letterToDocx` builds a real `docx.Document` straight
+   * from the same `LetterData` the on-screen preview renders, so the result is
+   * an editable Word file with actual text, not an embedded image.
+   */
+  async function handleDownloadWord() {
+    if (!ready || downloading) return;
+    setDownloading('word');
+    try {
+      const blob = await buildLetterDocxBlob(
+        assessment,
+        levels!,
+        responses!,
+        criteriaByLevelId,
+        layout,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `outcome-letter-${safeFileName(assessment)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error('[letter word download] failed', err);
+    } finally {
+      setDownloading(null);
     }
   }
 
@@ -168,13 +208,21 @@ export function LetterDialog({ assessment, trigger }: Props) {
               </Button>
             </DialogTrigger>
             <Button
+              type="button"
+              icon={<ArrowDownload20Regular />}
+              disabled={!ready || downloading !== null}
+              onClick={handleDownloadWord}
+            >
+              {downloading === 'word' ? 'Preparing…' : 'Download Word'}
+            </Button>
+            <Button
               className={styles.printBtn}
               type="button"
               icon={<ArrowDownload20Regular />}
-              disabled={!ready || downloading}
+              disabled={!ready || downloading !== null}
               onClick={handleDownload}
             >
-              {downloading ? 'Preparing…' : 'Download PDF'}
+              {downloading === 'pdf' ? 'Preparing…' : 'Download PDF'}
             </Button>
           </DialogActions>
         </DialogBody>

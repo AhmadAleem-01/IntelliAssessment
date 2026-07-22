@@ -14,6 +14,7 @@ import {
 } from '@fluentui/react-icons';
 import { seedDemo, type SeedStep, type SeedResult } from './seedDemo';
 import { seedAiDemo, type AiSeedResult } from './seedAiDemo';
+import { seedLetterDemo, type LetterSeedResult } from './seedLetterDemo';
 
 const useStyles = makeStyles({
   root: {
@@ -142,15 +143,17 @@ export function SeedDemoPage() {
   const [steps, setSteps] = useState<SeedStep[]>([]);
   const [result, setResult] = useState<SeedResult | null>(null);
   const [aiResult, setAiResult] = useState<AiSeedResult | null>(null);
+  const [letterResult, setLetterResult] = useState<LetterSeedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState<null | 'full' | 'ai'>(null);
+  const [running, setRunning] = useState<null | 'full' | 'ai' | 'letter'>(null);
 
-  /** Shared runner for both seeders — same step-streaming + error handling. */
-  async function run<T>(kind: 'full' | 'ai', fn: (p: typeof setSteps) => Promise<T>, onDone: (r: T) => void) {
+  /** Shared runner for all seeders — same step-streaming + error handling. */
+  async function run<T>(kind: 'full' | 'ai' | 'letter', fn: (p: typeof setSteps) => Promise<T>, onDone: (r: T) => void) {
     setRunning(kind);
     setError(null);
     setResult(null);
     setAiResult(null);
+    setLetterResult(null);
     setSteps([]);
     try {
       onDone(await fn(setSteps));
@@ -183,6 +186,12 @@ export function SeedDemoPage() {
           <b>Seed AI demo</b> — a leaner project whose questions each carry an AI
           evidence binding, plus a blank assessment ready for the auto-fill
           walkthrough. Pair it with the documents in <code>demo-files/</code>.
+          <br />
+          <b>Seed letter demo</b> — a "Qualifications" section with 5
+          subsections, each carrying its own Reason answer, on an assessment
+          that's fully answered with a varied mix. The letter layout is
+          pre-built with a Grouped subsections block, so View letter shows the
+          grouping immediately.
         </div>
       </div>
 
@@ -210,6 +219,14 @@ export function SeedDemoPage() {
             onClick={() => run('ai', seedAiDemo, setAiResult)}
           >
             {running === 'ai' ? 'Seeding…' : 'Seed AI demo'}
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<Sparkle16Filled />}
+            disabled={running !== null}
+            onClick={() => run('letter', seedLetterDemo, setLetterResult)}
+          >
+            {running === 'letter' ? 'Seeding…' : 'Seed letter demo'}
           </Button>
         </div>
 
@@ -299,6 +316,38 @@ export function SeedDemoPage() {
             </Link>
             <Link className={styles.resultLink} to={`/projects/${aiResult.projectId}`}>
               → Open the AI demo project
+            </Link>
+          </div>
+        )}
+
+        {letterResult && (
+          <div className={styles.resultLinks}>
+            <MessageBar intent="success" style={{ marginTop: 16 }}>
+              <MessageBarBody>
+                Letter demo seeded. The layout is pre-built — open View letter on
+                the assessment to see the grouping immediately, or open the
+                template's Letter tab to see it authored (Section: “
+                {letterResult.sectionName}”, grouped by “
+                {letterResult.groupByQuestionName}”).
+              </MessageBarBody>
+            </MessageBar>
+            <Link
+              className={styles.resultLink}
+              to={`/assessments/${letterResult.instanceId}`}
+            >
+              → Open the letter demo assessment (View letter → grouped qualifications)
+            </Link>
+            <Link
+              className={styles.resultLink}
+              to={`/templates/${letterResult.templateId}/edit`}
+            >
+              → Open the letter demo template (Letter tab shows the block config)
+            </Link>
+            <Link
+              className={styles.resultLink}
+              to={`/projects/${letterResult.projectId}`}
+            >
+              → Open the letter demo project
             </Link>
           </div>
         )}

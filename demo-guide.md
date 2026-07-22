@@ -13,6 +13,8 @@ A click-by-click script for showcasing IntelliAssessment V1 end-to-end. Designed
 
 For the AI auto-fill demo, also click **Seed AI demo** on the same page — it creates a separate, leaner project + a blank assessment whose questions are AI-bound. See [§10](#10-ai-auto-fill-2-3-min) below and `demo-files/README.md`.
 
+For the letter-builder demo, click **Seed letter demo** — a project + template with a "Qualifications" section holding 5 subsections (each with its own Reason question), on an assessment that's already answered with a varied mix of reasons. See [§11](#11-letter-builder--grouped-subsections-2-3-min) below.
+
 If you re-run a seed, you'll get a second copy of everything. Clean up in the Power Apps maker portal if it gets cluttered.
 
 ---
@@ -156,6 +158,27 @@ Talking point: *"The template author declares, per question, which evidence file
 
 Talking point: *"One LLM call per evidence file, not per question — the author's per-question instruction rides along in the prompt. Nothing is written until the assessor accepts, and the mapping is saved on the instance so re-opening restores it."*
 
+### 11. Letter builder + Grouped subsections (2–3 min)
+
+Uses the **separate** letter demo dataset — make sure you clicked **Seed letter demo** in setup. The seeded template has one "Qualifications" section with **5 subsections** (Qualification 1–5); each has its own "Reason" question (option-set: *Formal study* / *Relevant work experience* / *Industry certification*) plus a qualification name + a "Meets requirement?" flag, both marked *Include in outcome letter*. The seeded assessment already answers all five with a deliberately varied mix of reasons.
+
+**See the grouping immediately (the main act):**
+
+1. Open **Letter Demo — Priya Nair** → **View letter** in the hero.
+2. Scroll past the outcome block to **"Qualifications by reason"** — the five qualifications are split into three groups (*Formal study*, *Relevant work experience*, *Industry certification*), each showing its qualifications' name + "Meets requirement?" answer underneath.
+3. **Download PDF** → same grouping renders in the exported letter.
+
+Talking point: *"Each of the five qualifications carries its own copy of the Reason question — there's no shared field to point at. The letter groups them by matching the question's NAME across the sibling subsections, so this works for any repeated structure, not just this template."*
+
+**Show the authoring side (the builder):**
+
+1. Open the letter demo template → **Letter** tab. The canvas already shows the pre-built blocks: Heading, Details grid, Outcome, **Grouped subsections**, Reviewer notes — dragged in this order, autosaved.
+2. Click into the **Grouped subsections** block: two dropdowns — **Which section** (set to *Qualifications*) and **Group by which question** (set to *Reason*, listing every question name found inside that section's subsections). Note the live preview pane stays blank for this block — call that out: *"The preview here uses placeholder sample data with no real answers, so this block only shows content on a real, answered assessment — like the one we just looked at."*
+3. Optional: add a **second** Grouped subsections block, or duplicate/reorder existing blocks with the drag handle, to show it's not a one-off singleton.
+4. Optional: show rich text — add a **Text** block, type a sentence, hit **`/`** to open the inline slash menu, filter to a question, insert an answer chip, then colour it via the toolbar (select the chip first, then a swatch).
+
+Talking point: *"The whole layout is author-controlled and reusable across every assessment on this template — nothing here is per-assessment configuration."*
+
 ---
 
 ## Feature checklist
@@ -176,6 +199,10 @@ Use this if you only have time for one screen each:
 - [ ] Outcome letter — one-click PDF download
 - [ ] AI conditioning tab — per-question file variable + extraction query
 - [ ] AI auto-fill — map file variables → uploads, per-question selection, confidence-scored review, Accept all, AI badge
+- [ ] Letter tab — drag-drop block canvas + live preview
+- [ ] Grouped subsections block — section + group-by-question pickers
+- [ ] View letter — qualifications grouped by shared reason
+- [ ] Rich text — `/` slash menu, answer chip insert, colour a chip
 
 ---
 
@@ -194,3 +221,5 @@ To remove demo data after the demo:
 Or re-seed twice and only delete the *original* demo project + cascade — Dataverse will refuse if there are dangling lookups, prompting you to remove children first.
 
 The **AI demo** ("RPL — AI Auto-fill (Demo)") cleans up the same way: delete its responses → its levels' criteria → the levels → template → project. Also remove the evidence files you uploaded from the assessment's SharePoint folder.
+
+The **letter demo** ("RPL — Letter Grouping (Demo)") has no criteria to remove (no rule cascade was seeded) — just delete its responses → levels → template → project, same order as above.
