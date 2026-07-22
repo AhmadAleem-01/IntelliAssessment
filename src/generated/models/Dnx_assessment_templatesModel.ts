@@ -39,6 +39,8 @@ export interface Dnx_assessment_templates extends Dnx_assessment_templatesBase {
   createdon?: string;
   createdonbehalfbyname?: string;
   createdonbehalfbyyominame: string;
+  dnx_letter_background?: string;
+  dnx_letter_background_name?: string;
   modifiedbyname?: string;
   modifiedbyyominame: string;
   modifiedon?: string;
@@ -65,3 +67,4 @@ export interface Dnx_assessment_templates extends Dnx_assessment_templatesBase {
   owninguser?: object;
   _owninguser_value?: string;
 }
+export type Dnx_assessment_templatesUploadColumnName = 'dnx_letter_background';

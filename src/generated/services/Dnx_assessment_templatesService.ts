@@ -4,6 +4,7 @@
  */
 
 import type { Dnx_assessment_templatesBase, Dnx_assessment_templates } from '../models/Dnx_assessment_templatesModel';
+import type { Dnx_assessment_templatesUploadColumnName } from '../models/Dnx_assessment_templatesModel';
 import type { GetEntityMetadataOptions, EntityMetadata } from '@microsoft/power-apps/data/metadata/dataverse';
 import type { IGetOptions, IGetAllOptions } from '../models/CommonModels';
 import type { IOperationResult } from '@microsoft/power-apps/data';
@@ -68,5 +69,18 @@ export class Dnx_assessment_templatesService {
         },
       },
     });
+  }
+
+  public static async upload(id: string, columnName: Dnx_assessment_templatesUploadColumnName, file: File, fileDisplayName?: string): Promise<IOperationResult<void>> {
+    const arrayBuffer = await file.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+    const result = await Dnx_assessment_templatesService.client.uploadFileToRecord(
+      Dnx_assessment_templatesService.dataSourceName,
+      id,
+      columnName,
+      fileDisplayName || file.name,
+      data,
+    );
+    return result;
   }
 }

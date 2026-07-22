@@ -90,6 +90,23 @@
           "x-ms-schema-name": "dnx_Description",
           "maxLength": 3000
         },
+        "dnx_letter_background": {
+          "type": "string",
+          "title": "Letter Background",
+          "x-ms-dataverse-attribute": "dnx_letter_background",
+          "x-ms-dataverse-type": "FileType",
+          "x-ms-schema-name": "dnx_Letter_Background",
+          "x-ms-read-only": true
+        },
+        "dnx_letter_background_name": {
+          "type": "string",
+          "title": "dnx_letter_background_name",
+          "x-ms-dataverse-attribute": "dnx_letter_background_name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "dnx_Letter_Background_Name",
+          "x-ms-read-only": true,
+          "maxLength": 200
+        },
         "dnx_letter_template_json": {
           "type": "string",
           "title": "Letter Template JSON",

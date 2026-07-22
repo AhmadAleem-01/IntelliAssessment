@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getClient } from '@microsoft/power-apps/data';
 import { Dnx_assessment_templatesService } from '../../generated';
+import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import type {
   Dnx_assessment_templates,
   Dnx_assessment_templatesBase,
@@ -142,6 +145,108 @@ export function useSaveLetterLayout(id: string) {
       qc.invalidateQueries({ queryKey: templateKeys.detail(id) });
     },
   });
+}
+
+/**
+ * Upload a background image for the outcome letter into the template's
+ * `dnx_letter_background` **File** column (File over Image — Image columns
+ * downscale + re-encode, ruining a crisp logo; File stores exact bytes; see
+ * gotcha AB). File columns can't be written through the normal update body —
+ * they need the two-part write (gotcha O): the row already exists, so we just
+ * push the bytes via `uploadFileToRecord`. On success we refetch the template
+ * so the new `dnx_letter_background_name` lands in the cache.
+ */
+export function useSaveLetterBackground(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File): Promise<void> => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const client = getClient(dataSourcesInfo);
+      const r = await client.uploadFileToRecord(
+        'dnx_assessment_templates',
+        id,
+        'dnx_letter_background',
+        file.name,
+        bytes,
+      );
+      // The SDK returns a result envelope; surface a failure rather than
+      // silently leaving the author thinking the image saved.
+      if (r && typeof r === 'object' && 'success' in r && (r as { success: boolean }).success === false) {
+        console.error('[save letter background] failed', r);
+        throw new Error('Failed to upload the letter background image.');
+      }
+    },
+    onSuccess: () => {
+      // Force a refetch so the new dnx_letter_background_name arrives.
+      qc.invalidateQueries({ queryKey: templateKeys.detail(id) });
+    },
+  });
+}
+
+// Note: the SDK has no delete-file-from-record method, so "remove background"
+// is handled purely in the layout by flipping `page.image = false` — the
+// renderer then ignores the (still-present) bytes. See gotcha AB.
+
+/**
+ * Resolve a displayable URL for the template's letter-background image.
+ *
+ * A File column isn't servable by URL, so we download the bytes via
+ * `downloadFileFromRecord` (the same call the Word export uses — proven to
+ * work) and wrap them in an object URL. Returns undefined until loaded / when
+ * disabled. Only fetch when `enabled` (i.e. the layout actually uses a
+ * background) to avoid pulling image bytes needlessly. The object URL is
+ * revoked on cleanup so we don't leak blobs.
+ *
+ * `refreshKey` (e.g. `dnx_letter_background_name` + a client counter) forces a
+ * re-download after a replacement upload, since neither id nor enabled changes.
+ */
+export function useLetterBackgroundObjectUrl(
+  id: string | undefined,
+  enabled: boolean,
+  refreshKey?: number | string,
+) {
+  const [url, setUrl] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    let objectUrl: string | undefined;
+    let cancelled = false;
+    // Nothing to load — resolve to undefined asynchronously (never call
+    // setState synchronously in an effect body).
+    if (!id || !enabled) {
+      Promise.resolve().then(() => {
+        if (!cancelled) setUrl(undefined);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    (async () => {
+      try {
+        const client = getClient(dataSourcesInfo);
+        const r = await client.downloadFileFromRecord(
+          'dnx_assessment_templates',
+          id,
+          'dnx_letter_background',
+        );
+        if (cancelled) return;
+        if (r.success && r.data && r.data.byteLength > 0) {
+          objectUrl = URL.createObjectURL(new Blob([r.data]));
+          setUrl(objectUrl);
+        } else {
+          setUrl(undefined);
+        }
+      } catch (err) {
+        console.warn('[letter background] load failed', err);
+        if (!cancelled) setUrl(undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [id, enabled, refreshKey]);
+  // Guard against a stale URL flashing when the caller disables the background
+  // (the async clear above catches up a tick later).
+  return enabled ? url : undefined;
 }
 
 /** Publish: flip status to Published and bump version + published_on timestamp. */

@@ -21,6 +21,9 @@ import {
   TextAlignCenter16Regular,
   TextAlignRight16Regular,
   ArrowCounterclockwise16Regular,
+  Image16Regular,
+  ChevronDown16Regular,
+  ChevronRight16Regular,
 } from '@fluentui/react-icons';
 import {
   DndContext,
@@ -39,7 +42,12 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useTemplate, useSaveLetterLayout } from '../templates/api';
+import {
+  useTemplate,
+  useSaveLetterLayout,
+  useSaveLetterBackground,
+  useLetterBackgroundObjectUrl,
+} from '../templates/api';
 import { useTemplateLevels } from '../templates/levels/api';
 import { useCriteriaForLevels } from '../rules/api';
 import { LetterPreview } from './LetterPreview';
@@ -52,10 +60,13 @@ import {
   makeBlock,
   parseLetterLayout,
   serializeLetterLayout,
+  BACKGROUND_POSITIONS,
+  type BackgroundMode,
   type LetterBlock,
   type LetterBlockType,
   type LetterLayout,
   type MetaFieldKey,
+  type PageSettings,
   type TextAlign,
 } from './letterLayout';
 import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
@@ -165,7 +176,9 @@ const useStyles = makeStyles({
   previewWrap: {
     padding: '14px',
     backgroundColor: 'var(--color-background-tertiary)',
-    maxHeight: '72vh',
+    // Tall enough to show a full A4 page (740px wide ≈ 1047px tall) without
+    // scrolling; only scrolls when the authored letter runs longer than a page.
+    maxHeight: '90vh',
     overflow: 'auto',
   },
   empty: {
@@ -175,6 +188,83 @@ const useStyles = makeStyles({
     color: 'var(--color-text-secondary)',
     lineHeight: 1.5,
   },
+  // --- Page settings (letterhead) ---
+  pageSettings: {
+    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    backgroundColor: 'var(--color-background-secondary)',
+  },
+  pageSettingsToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: '100%',
+    padding: '10px 16px',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--color-text-secondary)',
+    textAlign: 'left',
+  },
+  pageSettingsBody: {
+    padding: '0 16px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '4px' },
+  fieldLabel: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: 'var(--color-text-secondary)',
+  },
+  bgRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  bgThumb: {
+    width: '48px',
+    height: '48px',
+    borderRadius: 'var(--border-radius-sm)',
+    border: '0.5px solid var(--color-border-secondary)',
+    objectFit: 'cover',
+    backgroundColor: '#fff',
+  },
+  bgControls: { display: 'flex', flexDirection: 'column', gap: '10px' },
+  bgControlRow: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
+  bgControlLabel: {
+    fontSize: '11px',
+    color: 'var(--color-text-secondary)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  posGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 18px)',
+    gridTemplateRows: 'repeat(3, 18px)',
+    gap: '3px',
+  },
+  posCell: {
+    width: '18px',
+    height: '18px',
+    padding: 0,
+    borderRadius: '3px',
+    border: '0.5px solid var(--color-border-secondary)',
+    backgroundColor: 'var(--color-background-primary)',
+    cursor: 'pointer',
+    ':hover': { backgroundColor: 'var(--color-purple-soft)' },
+  },
+  posCellActive: {
+    backgroundColor: 'var(--color-purple) !important',
+    border: '0.5px solid var(--color-purple) !important',
+  },
+  hiddenFile: { display: 'none' },
 });
 
 interface Props {
@@ -199,6 +289,7 @@ export function LetterBuilder({ templateId }: Props) {
   );
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
   const save = useSaveLetterLayout(templateId);
+  const saveBg = useSaveLetterBackground(templateId);
 
   const tree = useMemo(() => buildTree(levels), [levels]);
   // Flat list of Question levels for the "Insert answer" picker — each with a
@@ -215,6 +306,12 @@ export function LetterBuilder({ templateId }: Props) {
 
   const [layout, setLayout] = useState<LetterLayout | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [pageOpen, setPageOpen] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  // Bumped on each successful upload so the background re-downloads even when
+  // the replacement has the same filename (the File column has no timestamp).
+  const [bgRefresh, setBgRefresh] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
 
   // Seed local layout from the persisted JSON once the template loads. Keyed on
@@ -250,6 +347,15 @@ export function LetterBuilder({ templateId }: Props) {
     }, AUTOSAVE_MS);
   }
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
+
+  // Background image: download the bytes → object URL (File columns aren't
+  // servable by URL — see gotcha AB). Keyed on the filename + a local refresh
+  // counter so a replacement re-downloads even at the same name.
+  const backgroundUrl = useLetterBackgroundObjectUrl(
+    templateId,
+    !!layout?.page?.image,
+    `${template?.dnx_letter_background_name ?? ''}#${bgRefresh}`,
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -304,6 +410,35 @@ export function LetterBuilder({ templateId }: Props) {
     commit({ version: 1, blocks: DEFAULT_LAYOUT.blocks.map((b) => ({ ...b })) });
   }
 
+  /** Patch page-level letterhead settings, merging into any existing ones. */
+  function updatePage(patch: Partial<PageSettings>) {
+    const nextPage = { ...(layout!.page ?? {}), ...patch };
+    commit({ ...layout!, page: nextPage });
+  }
+
+  async function onPickBackground(file: File | undefined) {
+    setBgError(null);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setBgError('Please choose an image file.');
+      return;
+    }
+    // Sanity cap on upload size (File column stores full-fidelity bytes).
+    if (file.size > 8 * 1024 * 1024) {
+      setBgError('Image is larger than 8 MB — please use a smaller file.');
+      return;
+    }
+    try {
+      await saveBg.mutateAsync(file);
+      // Flag the layout so the renderer starts downloading the image, and bump
+      // the refresh counter so a same-name replacement re-downloads.
+      updatePage({ image: true });
+      setBgRefresh((n) => n + 1);
+    } catch (err) {
+      setBgError((err as Error).message || 'Upload failed.');
+    }
+  }
+
   const sampleAssessment = makeSampleAssessment(template?.dnx_template_name);
 
   return (
@@ -320,6 +455,179 @@ export function LetterBuilder({ templateId }: Props) {
                 : 'Autosaves as you edit'}
           </span>
         </div>
+
+        {/* --- Page settings (letterhead): header, footer, background --- */}
+        <div className={styles.pageSettings}>
+          <button
+            type="button"
+            className={styles.pageSettingsToggle}
+            onClick={() => setPageOpen((v) => !v)}
+            aria-expanded={pageOpen}
+          >
+            {pageOpen ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+            Page settings — header, footer &amp; background
+          </button>
+          {pageOpen && (
+            <div className={styles.pageSettingsBody}>
+              <div className={styles.fieldGroup}>
+                <span className={styles.fieldLabel}>Header (letterhead)</span>
+                <TokenTextEditor
+                  value={layout.page?.header ?? ''}
+                  onChange={(header) => updatePage({ header })}
+                  placeholder="Header — org name, address, logo text… (leave blank for the default brand strip)"
+                  questionOptions={questionOptions}
+                />
+              </div>
+              <div className={styles.fieldGroup}>
+                <span className={styles.fieldLabel}>Footer</span>
+                <TokenTextEditor
+                  value={layout.page?.footer ?? ''}
+                  onChange={(footer) => updatePage({ footer })}
+                  placeholder="Footer — contact line, disclaimer… (leave blank for the default footer)"
+                  questionOptions={questionOptions}
+                />
+              </div>
+              <div className={styles.fieldGroup}>
+                <span className={styles.fieldLabel}>Background image</span>
+                <div className={styles.bgRow}>
+                  {layout.page?.image && backgroundUrl && (
+                    <img src={backgroundUrl} alt="Letter background" className={styles.bgThumb} />
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className={styles.hiddenFile}
+                    onChange={(e) => {
+                      onPickBackground(e.target.files?.[0]);
+                      e.target.value = ''; // allow re-picking the same file
+                    }}
+                  />
+                  <Button
+                    size="small"
+                    appearance="secondary"
+                    icon={<Image16Regular />}
+                    disabled={saveBg.isPending}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {saveBg.isPending
+                      ? 'Uploading…'
+                      : layout.page?.image
+                        ? 'Replace image'
+                        : 'Upload image'}
+                  </Button>
+                  {layout.page?.image && (
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<Delete16Regular />}
+                      onClick={() => updatePage({ image: false })}
+                      title="Remove background from the letter"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                {bgError && (
+                  <span style={{ fontSize: 11, color: 'var(--color-red-text)' }}>{bgError}</span>
+                )}
+                {layout.page?.image && (
+                  <div className={styles.bgControls}>
+                    <div className={styles.bgControlRow}>
+                      <label className={styles.bgControlLabel}>
+                        Fit
+                        <Dropdown
+                          size="small"
+                          value={bgModeLabel(layout.page?.backgroundMode ?? 'contain')}
+                          selectedOptions={[layout.page?.backgroundMode ?? 'contain']}
+                          onOptionSelect={(_, d) =>
+                            updatePage({
+                              backgroundMode: (d.optionValue as BackgroundMode) ?? 'contain',
+                            })
+                          }
+                          style={{ minWidth: 110 }}
+                        >
+                          <Option value="contain" text="Fit">Fit (whole image)</Option>
+                          <Option value="cover" text="Cover">Cover (fill &amp; crop)</Option>
+                          <Option value="tile" text="Tile">Tile</Option>
+                        </Dropdown>
+                      </label>
+                      <label className={styles.bgControlLabel}>
+                        Opacity
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={Math.round((layout.page?.backgroundOpacity ?? 0.15) * 100)}
+                          onChange={(e) =>
+                            updatePage({ backgroundOpacity: Number(e.target.value) / 100 })
+                          }
+                        />
+                        <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 30 }}>
+                          {Math.round((layout.page?.backgroundOpacity ?? 0.15) * 100)}%
+                        </span>
+                      </label>
+                    </div>
+                    {/* Scale + position only matter when the image isn't tiled. */}
+                    {layout.page?.backgroundMode !== 'tile' && (
+                      <div className={styles.bgControlRow}>
+                        <label className={styles.bgControlLabel}>
+                          Size
+                          <input
+                            type="range"
+                            min={10}
+                            max={100}
+                            value={Math.round((layout.page?.backgroundScale ?? 1) * 100)}
+                            onChange={(e) =>
+                              updatePage({ backgroundScale: Number(e.target.value) / 100 })
+                            }
+                          />
+                          <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 30 }}>
+                            {Math.round((layout.page?.backgroundScale ?? 1) * 100)}%
+                          </span>
+                        </label>
+                        <label className={styles.bgControlLabel}>
+                          Position
+                          <div
+                            className={styles.posGrid}
+                            role="radiogroup"
+                            aria-label="Background position"
+                          >
+                            {BACKGROUND_POSITIONS.map((p) => {
+                              const active = (layout.page?.backgroundPosition ?? 'center') === p;
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={active}
+                                  aria-label={p.replace('-', ' ')}
+                                  title={p.replace('-', ' ')}
+                                  className={`${styles.posCell} ${active ? styles.posCellActive : ''}`}
+                                  onClick={() => updatePage({ backgroundPosition: p })}
+                                />
+                              );
+                            })}
+                          </div>
+                        </label>
+                      </div>
+                    )}
+                    {/* Bleed only applies to Fit — Cover is already full-bleed,
+                        Tile always covers the page. */}
+                    {(layout.page?.backgroundMode ?? 'contain') === 'contain' && (
+                      <Checkbox
+                        label="Bleed to page edge (ignore margins)"
+                        checked={layout.page?.backgroundBleed ?? false}
+                        onChange={(_, d) => updatePage({ backgroundBleed: !!d.checked })}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className={styles.palette}>
           {(Object.keys(LETTER_BLOCK_LABEL) as LetterBlockType[]).map((t) => {
             const disabled = SINGLETON_BLOCKS.has(t) && presentTypes.has(t);
@@ -393,6 +701,7 @@ export function LetterBuilder({ templateId }: Props) {
             responses={[]}
             criteriaByLevelId={criteriaByLevelId}
             layout={layout}
+            backgroundUrl={backgroundUrl}
           />
         </div>
       </div>
@@ -642,6 +951,10 @@ function BlockEditor({
       }
     }
   }
+}
+
+function bgModeLabel(mode: BackgroundMode): string {
+  return mode === 'cover' ? 'Cover' : mode === 'contain' ? 'Fit' : 'Tile';
 }
 
 function PlaceholderHint({ styles }: { styles: ReturnType<typeof useStyles> }) {

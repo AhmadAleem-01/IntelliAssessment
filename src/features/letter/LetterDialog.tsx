@@ -16,15 +16,17 @@ import {
 } from '@fluentui/react-icons';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assessment_instancesModel';
 import { useTemplateLevels } from '../templates/levels/api';
 import { useAssessmentResponses } from '../assessments/api';
 import { useCriteriaForLevels } from '../rules/api';
-import { useTemplate } from '../templates/api';
+import { useTemplate, useLetterBackgroundObjectUrl } from '../templates/api';
 import { lookupId } from '../../lib/dataverse';
 import { LetterPreview } from './LetterPreview';
 import { parseLetterLayout } from './letterLayout';
-import { buildLetterDocxBlob } from './letterToDocx';
+import { buildLetterDocxBlob, type DocxLetterhead } from './letterToDocx';
 
 const useStyles = makeStyles({
   surface: {
@@ -56,6 +58,25 @@ const useStyles = makeStyles({
     justifyContent: 'center',
   },
 });
+
+/** Load an image URL just to read its intrinsic pixel size. Resolves null on error. */
+function imageDimensions(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+/** Best-effort image type for the docx ImageRun, inferred from the filename. */
+function guessImageType(name: string | undefined): 'png' | 'jpg' | 'gif' | 'bmp' {
+  const u = (name ?? '').toLowerCase();
+  if (u.includes('.jpg') || u.includes('.jpeg')) return 'jpg';
+  if (u.includes('.gif')) return 'gif';
+  if (u.includes('.bmp')) return 'bmp';
+  return 'png';
+}
 
 /** Shared download-filename slug — used by both the PDF and Word export. */
 function safeFileName(assessment: Dnx_assessment_instances): string {
@@ -90,6 +111,12 @@ export function LetterDialog({ assessment, trigger }: Props) {
   const layout = parseLetterLayout(template?.dnx_letter_template_json);
   const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
+  // Letter background: download bytes → object URL (see gotcha AB).
+  const backgroundUrl = useLetterBackgroundObjectUrl(
+    open ? templateId ?? undefined : undefined,
+    !!layout?.page?.image,
+    template?.dnx_letter_background_name,
+  );
 
   const loading = open && (levelsLoading || respLoading);
   const ready = open && !loading && levels && responses;
@@ -156,12 +183,46 @@ export function LetterDialog({ assessment, trigger }: Props) {
     if (!ready || downloading) return;
     setDownloading('word');
     try {
+      // Pull the background image bytes for the Word export only when the layout
+      // uses one — the on-screen/PDF path renders it straight from the URL, but
+      // docx needs the raw bytes embedded. Failure here is non-fatal: the doc
+      // still generates, just without the background.
+      let letterhead: DocxLetterhead | undefined;
+      if (layout?.page?.image && templateId) {
+        try {
+          const client = getClient(dataSourcesInfo);
+          const r = await client.downloadFileFromRecord(
+            'dnx_assessment_templates',
+            templateId,
+            'dnx_letter_background',
+          );
+          if (r.success && r.data) {
+            // Read intrinsic dimensions so the docx export can preserve aspect
+            // ratio (avoids the full-page stretch). Uses the already-loaded
+            // object URL; falls back to no dims (full-page fit) if it fails.
+            const dims = backgroundUrl ? await imageDimensions(backgroundUrl) : undefined;
+            letterhead = {
+              backgroundBytes: r.data,
+              backgroundType: guessImageType(template?.dnx_letter_background_name),
+              backgroundWidth: dims?.width,
+              backgroundHeight: dims?.height,
+              backgroundMode: layout?.page?.backgroundMode ?? 'contain',
+              backgroundScale: layout?.page?.backgroundScale ?? 1,
+              backgroundPosition: layout?.page?.backgroundPosition ?? 'center',
+              backgroundBleed: layout?.page?.backgroundBleed ?? false,
+            };
+          }
+        } catch (bgErr) {
+          console.warn('[letter word] background fetch failed, exporting without it', bgErr);
+        }
+      }
       const blob = await buildLetterDocxBlob(
         assessment,
         levels!,
         responses!,
         criteriaByLevelId,
         layout,
+        letterhead,
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -197,6 +258,7 @@ export function LetterDialog({ assessment, trigger }: Props) {
                   responses={responses!}
                   criteriaByLevelId={criteriaByLevelId}
                   layout={layout}
+                  backgroundUrl={backgroundUrl}
                 />
               </div>
             )}
