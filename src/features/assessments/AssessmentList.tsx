@@ -71,6 +71,16 @@ const useStyles = makeStyles({
     fontWeight: 500,
     flexShrink: 0,
   },
+  outcomePillSuitable: {
+    backgroundColor: 'var(--color-green-soft)',
+    color: 'var(--color-green-text)',
+    border: '0.5px solid var(--color-green)',
+  },
+  outcomePillNot: {
+    backgroundColor: 'var(--color-red-soft)',
+    color: 'var(--color-red-text)',
+    border: '0.5px solid var(--color-red)',
+  },
   empty: {
     backgroundColor: 'var(--color-background-primary)',
     border: '0.5px dashed var(--color-border-secondary)',
@@ -139,6 +149,9 @@ export function AssessmentList({ items, showProject, emptyMessage }: Props) {
         const status = STATUS_STYLES[label] ?? STATUS_STYLES.Draft;
         const templateName = lookupName(a, 'dnx_assessmenttemplate');
         const projectName = showProject ? lookupName(a, 'dnx_project') : undefined;
+        // Only Complete assessments carry a meaningful persisted outcome —
+        // Draft/InProgress/PendingReview haven't been submitted+approved yet.
+        const outcome = label === 'Complete' ? a.dnx_outcome : undefined;
         return (
           <Link
             key={a.dnx_assessment_instanceid}
@@ -178,6 +191,12 @@ export function AssessmentList({ items, showProject, emptyMessage }: Props) {
             >
               {status.label}
             </span>
+            {outcome === 0 && (
+              <span className={`${styles.pill} ${styles.outcomePillSuitable}`}>Suitable</span>
+            )}
+            {outcome === 1 && (
+              <span className={`${styles.pill} ${styles.outcomePillNot}`}>Not suitable</span>
+            )}
           </Link>
         );
       })}
