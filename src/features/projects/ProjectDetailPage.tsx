@@ -17,6 +17,7 @@ import { EditProjectDialog } from './EditProjectDialog';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { Dnx_projectsstatuscode } from '../../generated/models/Dnx_projectsModel';
 import { lookupName } from '../../lib/dataverse';
+import { useCurrentUserRoles } from '../../lib/roles';
 import { useAssessmentInstancesByProject } from '../assessments/api';
 import { AssessmentList } from '../assessments/AssessmentList';
 import { NewAssessmentDialog } from '../assessments/NewAssessmentDialog';
@@ -185,6 +186,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }
 
 export function ProjectDetailPage() {
   const styles = useStyles();
+  const roles = useCurrentUserRoles();
   const { projectId } = useParams<{ projectId: string }>();
   const { data: project, isLoading, error } = useProject(projectId);
   const { data: assessments } = useAssessmentInstancesByProject(projectId);
@@ -238,19 +240,21 @@ export function ProjectDetailPage() {
               </Button>
             }
           />
-          <DeleteProjectDialog
-            projectId={project.dnx_projectid}
-            projectName={project.dnx_project_name}
-            trigger={
-              <Button
-                className={styles.deleteBtn}
-                appearance="secondary"
-                icon={<Delete16Regular />}
-              >
-                Delete
-              </Button>
-            }
-          />
+          {roles.canAdmin && (
+            <DeleteProjectDialog
+              projectId={project.dnx_projectid}
+              projectName={project.dnx_project_name}
+              trigger={
+                <Button
+                  className={styles.deleteBtn}
+                  appearance="secondary"
+                  icon={<Delete16Regular />}
+                >
+                  Delete
+                </Button>
+              }
+            />
+          )}
         </div>
       </div>
 

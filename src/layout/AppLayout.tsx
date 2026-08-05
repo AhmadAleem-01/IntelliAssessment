@@ -4,6 +4,8 @@ import {
   Alert16Regular,
   ClipboardTaskListLtr20Regular,
 } from '@fluentui/react-icons';
+import { useCurrentUser } from '../lib/currentUser';
+import { useCurrentUserRoles, appRoleLabel } from '../lib/roles';
 
 const useStyles = makeStyles({
   root: {
@@ -94,6 +96,21 @@ const useStyles = makeStyles({
       color: 'var(--color-text-primary)',
     },
   },
+  rolePill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '3px 9px',
+    borderRadius: 'var(--border-radius-pill)',
+    fontSize: '11px',
+    fontWeight: 500,
+    backgroundColor: 'var(--color-purple-soft)',
+    color: 'var(--color-purple-text)',
+    whiteSpace: 'nowrap',
+  },
+  rolePillNone: {
+    backgroundColor: 'var(--color-gray-soft)',
+    color: 'var(--color-gray-text)',
+  },
   avatar: {
     width: '28px',
     height: '28px',
@@ -123,8 +140,20 @@ const NAV = [
   { to: '/templates', label: 'Templates' },
 ];
 
+/** First-letter initials from a full name (max 2), fallback "?". */
+function initialsOf(name: string | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const letters = parts.slice(0, 2).map((p) => p[0]!.toUpperCase());
+  return letters.join('');
+}
+
 export function AppLayout() {
   const styles = useStyles();
+  const { data: user } = useCurrentUser();
+  const roles = useCurrentUserRoles();
+  const name = user?.fullName;
+  const roleText = appRoleLabel(roles);
   return (
     <div className={styles.root}>
       <header className={styles.topbar}>
@@ -152,8 +181,24 @@ export function AppLayout() {
           <div className={styles.iconBtn} title="Notifications" aria-label="Notifications">
             <Alert16Regular />
           </div>
-          <div className={styles.avatar} title="Ahmad Aleem" aria-label="Account">
-            AA
+          {!roles.isLoading && (
+            <span
+              className={`${styles.rolePill} ${roleText ? '' : styles.rolePillNone}`}
+              title={
+                roleText
+                  ? `Your app role${roleText.includes('·') ? 's' : ''}: ${roleText}`
+                  : 'No app role assigned — some actions are hidden'
+              }
+            >
+              {roleText || 'No role'}
+            </span>
+          )}
+          <div
+            className={styles.avatar}
+            title={name ?? 'Account'}
+            aria-label={name ? `Account: ${name}` : 'Account'}
+          >
+            {initialsOf(name)}
           </div>
         </div>
       </header>

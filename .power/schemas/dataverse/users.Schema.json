@@ -511,8 +511,7 @@
           "title": "Azure AD Object ID",
           "x-ms-dataverse-attribute": "azureactivedirectoryobjectid",
           "x-ms-dataverse-type": "UniqueidentifierType",
-          "x-ms-schema-name": "AzureActiveDirectoryObjectId",
-          "x-ms-read-only": true
+          "x-ms-schema-name": "AzureActiveDirectoryObjectId"
         },
         "azuredeletedon": {
           "type": "string",
@@ -1506,12 +1505,64 @@
           "x-ms-schema-name": "msdyn_BotSecretKeys",
           "maxLength": 100
         },
+        "msdyn_bottype": {
+          "type": "string",
+          "title": "Bot Type",
+          "x-ms-dataverse-attribute": "msdyn_bottype",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "msdyn_BotType",
+          "enum": [
+            "Microsoft Copilot Studio"
+          ],
+          "x-ms-enum-values": [
+            192350001
+          ],
+          "Color": [
+            "#0000ff"
+          ],
+          "x-ms-optionsetmetadataid": "2e2a126d-9471-f111-ab0e-6045bde61ec6",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Bot Type",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "msdyn_bottypename": {
+          "type": "string",
+          "title": "msdyn_bottypename",
+          "x-ms-dataverse-attribute": "msdyn_bottypename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "msdyn_bottypeName",
+          "x-ms-read-only": true
+        },
+        "msdyn_callforwardingnumber": {
+          "type": "string",
+          "title": "Call forward number",
+          "x-ms-dataverse-attribute": "msdyn_callforwardingnumber",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "msdyn_callforwardingnumber",
+          "maxLength": 50
+        },
         "msdyn_capacity": {
           "type": "string",
           "title": "Capacity",
           "x-ms-dataverse-attribute": "msdyn_capacity",
           "x-ms-dataverse-type": "IntegerType",
           "x-ms-schema-name": "msdyn_Capacity"
+        },
+        "msdyn_cognitiveservicesregion": {
+          "type": "string",
+          "title": "Cognitive Services Region",
+          "x-ms-dataverse-attribute": "msdyn_cognitiveservicesregion",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "msdyn_cognitiveservicesregion",
+          "maxLength": 100
+        },
+        "msdyn_cognitiveservicessubscriptionkey": {
+          "type": "string",
+          "title": "Cognitive Services Subscription Key",
+          "x-ms-dataverse-attribute": "msdyn_cognitiveservicessubscriptionkey",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "msdyn_cognitiveservicessubscriptionkey",
+          "maxLength": 100
         },
         "msdyn_defaultpresenceiduser": {
           "type": "string",
@@ -1528,6 +1579,14 @@
           "x-ms-schema-name": "msdyn_DefaultPresenceIdUserName",
           "x-ms-read-only": true,
           "maxLength": 100
+        },
+        "msdyn_emergencyemailrecipients": {
+          "type": "string",
+          "title": "Recipient emails",
+          "x-ms-dataverse-attribute": "msdyn_emergencyemailrecipients",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "msdyn_emergencyemailrecipients",
+          "maxLength": 4000
         },
         "msdyn_gdproptout": {
           "type": "string",
@@ -1700,6 +1759,22 @@
           "x-ms-dataverse-type": "StringType",
           "x-ms-schema-name": "msdyn_OwningEnvironmentId",
           "maxLength": 500
+        },
+        "msdyn_phonenumberid": {
+          "type": "string",
+          "title": "Phone Number",
+          "x-ms-dataverse-attribute": "msdyn_phonenumberid",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "msdyn_phonenumberid"
+        },
+        "msdyn_phonenumberidname": {
+          "type": "string",
+          "title": "msdyn_phonenumberidname",
+          "x-ms-dataverse-attribute": "msdyn_phonenumberidname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "msdyn_phonenumberidName",
+          "x-ms-read-only": true,
+          "maxLength": 100
         },
         "msdyn_usertype": {
           "type": "string",
@@ -1941,19 +2016,22 @@
             "Main Phone",
             "Other Phone",
             "Home Phone",
-            "Mobile Phone"
+            "Mobile Phone",
+            "Omnichannel Phone"
           ],
           "x-ms-enum-values": [
             1,
             2,
             3,
-            4
+            4,
+            192350005
           ],
           "Color": [
             null,
             null,
             null,
-            null
+            null,
+            "#0000ff"
           ],
           "x-ms-optionsetmetadataid": "c6620dd8-087a-4747-b9e1-103bcbe0af7c",
           "x-ms-isGlobal": false,
@@ -2082,15 +2160,18 @@
             "Entra User",
             "C2 User",
             "Impersonable Stub User",
-            "Agentic User"
+            "Agentic User",
+            "NonLicensed"
           ],
           "x-ms-enum-values": [
             0,
             1,
             2,
-            3
+            3,
+            4
           ],
           "Color": [
+            null,
             null,
             null,
             null,

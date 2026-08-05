@@ -19,6 +19,7 @@ import { EditTemplateDialog } from './EditTemplateDialog';
 import { DeleteTemplateDialog } from './DeleteTemplateDialog';
 import { Dnx_assessment_templatesstatuscode } from '../../generated/models/Dnx_assessment_templatesModel';
 import { lookupName } from '../../lib/dataverse';
+import { useCurrentUserRoles } from '../../lib/roles';
 import { LevelTree } from './levels/LevelTree';
 import { ScoringMatrix } from '../rules/ScoringMatrix';
 import { AiConditioningMatrix } from './levels/AiConditioningMatrix';
@@ -186,6 +187,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }
 
 export function TemplateEditorPage() {
   const styles = useStyles();
+  const roles = useCurrentUserRoles();
   const { templateId } = useParams<{ templateId: string }>();
   const { data: template, isLoading, error } = useTemplate(templateId);
   const publish = usePublishTemplate(templateId ?? '');
@@ -274,19 +276,21 @@ export function TemplateEditorPage() {
               </Button>
             }
           />
-          <DeleteTemplateDialog
-            templateId={template.dnx_assessment_templateid}
-            templateName={template.dnx_template_name}
-            trigger={
-              <Button
-                className={styles.deleteBtn}
-                appearance="secondary"
-                icon={<Delete16Regular />}
-              >
-                Delete
-              </Button>
-            }
-          />
+          {roles.canAdmin && (
+            <DeleteTemplateDialog
+              templateId={template.dnx_assessment_templateid}
+              templateName={template.dnx_template_name}
+              trigger={
+                <Button
+                  className={styles.deleteBtn}
+                  appearance="secondary"
+                  icon={<Delete16Regular />}
+                >
+                  Delete
+                </Button>
+              }
+            />
+          )}
         </div>
       </div>
 

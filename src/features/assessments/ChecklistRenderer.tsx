@@ -289,6 +289,13 @@ interface Props {
   pendingReview: boolean;
   /** Date assessment was submitted, used in the banner copy. */
   submittedOn?: string;
+  /**
+   * Whether the signed-in user may edit answers / reopen / resolve flags
+   * (Assessor or Admin). When false, the checklist is read-only regardless of
+   * status and the assessor-only actions are hidden. Defaults true so callers
+   * that don't gate keep prior behaviour.
+   */
+  canAssess?: boolean;
 }
 
 export function ChecklistRenderer({
@@ -298,9 +305,14 @@ export function ChecklistRenderer({
   readOnly,
   pendingReview,
   submittedOn,
+  canAssess = true,
 }: Props) {
   const styles = useStyles();
   const reopen = useReopenAssessment(instanceId);
+  // A non-assessor never gets interactive inputs, even in an editable status.
+  const inputsLocked = readOnly || !canAssess;
+  // Reopen is an assessor action — only when they could otherwise edit.
+  const canReopen = pendingReview && canAssess;
   const { data: comments } = useReviewerComments(instanceId);
   const resolveFlag = useResolveReviewerComment(instanceId);
 
@@ -451,18 +463,24 @@ export function ChecklistRenderer({
           </Button>
         </div>
       )}
-      {readOnly && (
+      {(readOnly || !canAssess) && (
         <div
-          className={`${styles.lockBanner} ${pendingReview ? '' : styles.lockBannerLocked}`}
+          className={`${styles.lockBanner} ${pendingReview && canAssess ? '' : styles.lockBannerLocked}`}
         >
           <span className={styles.lockIcon}>
             <LockClosed16Regular />
           </span>
           <div className={styles.lockText}>
             <div className={styles.lockTitle}>
-              {pendingReview ? 'Submitted for review' : 'Assessment complete'}
+              {!readOnly && !canAssess
+                ? 'Read-only'
+                : pendingReview
+                  ? 'Submitted for review'
+                  : 'Assessment complete'}
             </div>
-            {pendingReview ? (
+            {!readOnly && !canAssess ? (
+              <>You don't have the Assessor role, so this checklist is read-only for you.</>
+            ) : pendingReview ? (
               <>
                 Submitted{submittedOn ? ` on ${new Date(submittedOn).toLocaleDateString()}` : ''}.
                 The checklist is read-only until you reopen it.
@@ -471,7 +489,7 @@ export function ChecklistRenderer({
               <>This assessment is finalised and can no longer be edited.</>
             )}
           </div>
-          {pendingReview && (
+          {canReopen && (
             <Button
               appearance="secondary"
               icon={<Open16Regular />}
@@ -517,7 +535,7 @@ export function ChecklistRenderer({
           }
           onResolveFlag={(commentId) => resolveFlag.mutate(commentId)}
           resolvingFlagId={resolveFlag.isPending ? resolveFlag.variables ?? null : null}
-          disabled={readOnly || upsert.isPending}
+          disabled={inputsLocked || upsert.isPending}
         />
       ))}
     </div>

@@ -89,6 +89,10 @@ export const Systemusersmsdyn_botprovider = {
   192350002: 'None'
 } as const;
 export type Systemusersmsdyn_botprovider = keyof typeof Systemusersmsdyn_botprovider;
+export const Systemusersmsdyn_bottype = {
+  192350001: 'MicrosoftCopilotStudio'
+} as const;
+export type Systemusersmsdyn_bottype = keyof typeof Systemusersmsdyn_bottype;
 export const Systemusersmsdyn_usertype = {
   192350000: 'CRMUser',
   192350001: 'BOTUser'
@@ -113,14 +117,16 @@ export const Systemuserspreferredphonecode = {
   1: 'MainPhone',
   2: 'OtherPhone',
   3: 'HomePhone',
-  4: 'MobilePhone'
+  4: 'MobilePhone',
+  192350005: 'OmnichannelPhone'
 } as const;
 export type Systemuserspreferredphonecode = keyof typeof Systemuserspreferredphonecode;
 export const Systemuserssystemmanagedusertype = {
   0: 'EntraUser',
   1: 'C2User',
   2: 'ImpersonableStubUser',
-  3: 'AgenticUser'
+  3: 'AgenticUser',
+  4: 'NonLicensed'
 } as const;
 export type Systemuserssystemmanagedusertype = keyof typeof Systemuserssystemmanagedusertype;
 
@@ -169,6 +175,7 @@ export interface SystemusersBase {
   address2_upszone?: string;
   address2_utcoffset?: number;
   applicationid?: string;
+  azureactivedirectoryobjectid?: string;
   azurestate: Systemusersazurestate;
   "BusinessUnitId@odata.bind": string;
   "CalendarId@odata.bind"?: string;
@@ -204,8 +211,13 @@ export interface SystemusersBase {
   msdyn_bothandle?: string;
   msdyn_botprovider: Systemusersmsdyn_botprovider;
   msdyn_botsecretkeys?: string;
+  msdyn_bottype?: Systemusersmsdyn_bottype;
+  msdyn_callforwardingnumber?: string;
   msdyn_capacity?: number;
+  msdyn_cognitiveservicesregion?: string;
+  msdyn_cognitiveservicessubscriptionkey?: string;
   "msdyn_DefaultPresenceIdUser@odata.bind"?: string;
+  msdyn_emergencyemailrecipients?: string;
   msdyn_gdproptout?: boolean;
   msdyn_gridwrappercontrolfield?: string;
   msdyn_ischatintentenabled?: boolean;
@@ -213,6 +225,7 @@ export interface SystemusersBase {
   msdyn_ismultichannelintentenabled?: boolean;
   msdyn_isvoiceintentenabled?: boolean;
   msdyn_owningenvironmentid?: string;
+  "msdyn_phonenumberid@odata.bind"?: string;
   msdyn_usertype?: Systemusersmsdyn_usertype;
   nickname?: string;
   outgoingemaildeliverymethod: Systemusersoutgoingemaildeliverymethod;
@@ -261,7 +274,6 @@ export interface Systemusers extends SystemusersBase {
   address2_composite?: string;
   address2_shippingmethodcodename?: string;
   applicationiduri?: string;
-  azureactivedirectoryobjectid?: string;
   azuredeletedon?: string;
   azurestatename?: string;
   businessunitidname: string;
@@ -301,12 +313,14 @@ export interface Systemusers extends SystemusersBase {
   modifiedonbehalfbyyominame?: string;
   msdyn_agenttypename?: string;
   msdyn_botprovidername?: string;
+  msdyn_bottypename?: string;
   msdyn_defaultpresenceidusername?: string;
   msdyn_gdproptoutname?: string;
   msdyn_ischatintentenabledname?: string;
   msdyn_isexpertenabledforswarmname?: string;
   msdyn_ismultichannelintentenabledname?: string;
   msdyn_isvoiceintentenabledname?: string;
+  msdyn_phonenumberidname?: string;
   msdyn_usertypename?: string;
   organizationid: string;
   organizationidname: string;
@@ -344,6 +358,8 @@ export interface Systemusers extends SystemusersBase {
   _modifiedonbehalfby_value?: string;
   msdyn_defaultpresenceiduser?: object;
   _msdyn_defaultpresenceiduser_value?: string;
+  msdyn_phonenumberid?: object;
+  _msdyn_phonenumberid_value?: string;
   parentsystemuserid?: object;
   _parentsystemuserid_value?: string;
   positionid?: object;

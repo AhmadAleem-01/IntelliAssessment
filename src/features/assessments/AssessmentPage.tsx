@@ -35,6 +35,7 @@ import { ApproveAssessmentDialog } from './ApproveAssessmentDialog';
 import { RejectAssessmentDialog } from './RejectAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
+import { useCurrentUserRoles } from '../../lib/roles';
 import { Tooltip } from '@fluentui/react-components';
 import { DocumentText20Regular } from '@fluentui/react-icons';
 import { LetterDialog } from '../letter/LetterDialog';
@@ -341,6 +342,7 @@ export function AssessmentPage() {
   const styles = useStyles();
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const { data: assessment, isLoading, error } = useAssessmentInstance(assessmentId);
+  const roles = useCurrentUserRoles();
 
   // Autosave state — lifted here so the badge in the hero can see the upsert
   // mutation's status. ChecklistRenderer gets the mutation via prop.
@@ -500,7 +502,7 @@ export function AssessmentPage() {
                 </Button>
               }
             />
-            {label !== 'PendingReview' && label !== 'Complete' && (
+            {label !== 'PendingReview' && label !== 'Complete' && roles.canAssess && (
               <SubmitAssessmentDialog
                 instanceId={assessment.dnx_assessment_instanceid}
                 templateId={templateId}
@@ -594,7 +596,7 @@ export function AssessmentPage() {
 
       <ReviewerFeedbackBanner assessment={assessment} statusLabel={label} />
 
-      {label === 'PendingReview' && (
+      {label === 'PendingReview' && roles.canReview && (
         <div className={styles.reviewerPanel}>
           <div className={styles.reviewerMark}>
             <PersonStar16Regular />
@@ -642,7 +644,7 @@ export function AssessmentPage() {
         assessmentName={assessment.dnx_assessment_name}
         disabled={label === 'PendingReview' || label === 'Complete'}
         onAiPopulate={
-          label === 'PendingReview' || label === 'Complete'
+          label === 'PendingReview' || label === 'Complete' || !roles.canAssess
             ? undefined
             : () => setAiOpen(true)
         }
@@ -668,6 +670,7 @@ export function AssessmentPage() {
           readOnly={label === 'PendingReview' || label === 'Complete'}
           pendingReview={label === 'PendingReview'}
           submittedOn={assessment.dnx_submittedon}
+          canAssess={roles.canAssess}
         />
       ) : (
         <div className={styles.placeholder}>

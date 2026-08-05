@@ -96,6 +96,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "roles": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "roleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "systemusers": {
     "tableId": "",
     "version": "",

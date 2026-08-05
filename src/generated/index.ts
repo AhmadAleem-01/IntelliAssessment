@@ -22,6 +22,7 @@ export * as Dnx_scoring_groupsModel from './models/Dnx_scoring_groupsModel';
 export * as DocumentTextExtractionFlowModel from './models/DocumentTextExtractionFlowModel';
 export * as GetSharepointFilesModel from './models/GetSharepointFilesModel';
 export * as IncidentsModel from './models/IncidentsModel';
+export * as RolesModel from './models/RolesModel';
 export * as SystemusersModel from './models/SystemusersModel';
 export * as UploadSharepointFileModel from './models/UploadSharepointFileModel';
 
@@ -43,5 +44,6 @@ export * from './services/Dnx_scoring_groupsService';
 export * from './services/DocumentTextExtractionFlowService';
 export * from './services/GetSharepointFilesService';
 export * from './services/IncidentsService';
+export * from './services/RolesService';
 export * from './services/SystemusersService';
 export * from './services/UploadSharepointFileService';

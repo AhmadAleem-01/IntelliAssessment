@@ -153,6 +153,10 @@
         "users": {
           "entitySetName": "systemusers",
           "logicalName": "systemuser"
+        },
+        "securityroles": {
+          "entitySetName": "roles",
+          "logicalName": "role"
         }
       },
       "environmentVariableName": ""
