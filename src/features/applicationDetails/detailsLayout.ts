@@ -23,6 +23,14 @@ export interface DetailsField {
 export interface DetailsLayout {
   version: 1;
   fields: DetailsField[];
+  /**
+   * Fixed **0-based array index** this panel's repeating (`[]`) paths resolve
+   * at. Use when a fixed subsection maps to one element of a JSON array — e.g.
+   * three "Qualification N" subsections each pinned to `qualifications[0/1/2]`.
+   * Undefined = default behaviour: repeating paths render *one block per item*.
+   * (Authored 1-based in the UI; stored 0-based.)
+   */
+  arrayIndex?: number;
 }
 
 let idCounter = 0;
@@ -61,7 +69,13 @@ export function parseDetailsLayout(stored: string | null | undefined): DetailsLa
       });
     }
     if (fields.length === 0) return undefined;
-    return { version: 1, fields };
+    const arrayIndex =
+      typeof parsed.arrayIndex === 'number' &&
+      Number.isInteger(parsed.arrayIndex) &&
+      parsed.arrayIndex >= 0
+        ? parsed.arrayIndex
+        : undefined;
+    return { version: 1, fields, arrayIndex };
   } catch {
     return undefined;
   }
@@ -71,5 +85,6 @@ export function serializeDetailsLayout(layout: DetailsLayout): string {
   return JSON.stringify({
     version: 1,
     fields: layout.fields.map((f) => ({ id: f.id, path: f.path, label: f.label })),
+    ...(layout.arrayIndex !== undefined ? { arrayIndex: layout.arrayIndex } : {}),
   });
 }

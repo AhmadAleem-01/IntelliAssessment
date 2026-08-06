@@ -74,6 +74,12 @@ export function DetailsPanel({ storedLayout, applicationData }: Props) {
   const scalarFields = layout.fields.filter((f) => !isRepeatingPath(f.path));
   const repeatingFields = layout.fields.filter((f) => isRepeatingPath(f.path));
 
+  // A fixed `arrayIndex` pins this whole panel to one array element (e.g. a
+  // "Qualification 2" subsection → qualifications[1]); its repeating fields then
+  // render a single block at that index, not one-per-item.
+  const pinnedIndex = layout.arrayIndex;
+  const isPinned = pinnedIndex !== undefined;
+
   // Item count = the longest array any repeating field iterates. (Different
   // fields usually iterate the same array; taking the max keeps them aligned.)
   const itemCount = repeatingFields.reduce(
@@ -106,7 +112,26 @@ export function DetailsPanel({ storedLayout, applicationData }: Props) {
         </div>
       )}
 
+      {/* Pinned to a fixed array index: one block, resolved at that index. */}
+      {repeatingFields.length > 0 && isPinned && (
+        <div className={styles.grid}>
+          {repeatingFields.map((f) => {
+            const resolved = resolvePathAt(applicationData, f.path, pinnedIndex!);
+            return (
+              <div key={f.id} className={styles.row}>
+                <span className={styles.key}>{label(f)}</span>
+                <span className={styles.val}>
+                  {resolved === undefined ? '—' : formatValue(resolved)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Not pinned: render one block per array item. */}
       {repeatingFields.length > 0 &&
+        !isPinned &&
         (itemCount === 0 ? (
           <div className={styles.empty}>No items.</div>
         ) : (

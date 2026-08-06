@@ -100,6 +100,7 @@ const INSTANCE_APPLICATION: Record<string, unknown> = {
   qualifications: [
     { title: 'BSc Computer Science', institution: 'University of Pune', year: 2013 },
     { title: 'MSc Data Science', institution: 'UNSW', year: 2019 },
+    { title: 'Grad Cert Cloud Architecture', institution: 'RMIT', year: 2022 },
   ],
 };
 
@@ -121,6 +122,8 @@ interface CreateLevelOpts {
   };
   /** Serialised details layout (attribute paths to show) → dnx_details_layout. */
   detailsPaths?: string[];
+  /** Pin the details panel's repeating paths to a fixed 0-based array index. */
+  detailsArrayIndex?: number;
 }
 
 async function createLevel(opts: CreateLevelOpts): Promise<string> {
@@ -150,6 +153,7 @@ async function createLevel(opts: CreateLevelOpts): Promise<string> {
     record.dnx_details_layout = serializeDetailsLayout({
       version: 1,
       fields: opts.detailsPaths.map((p) => makeDetailsField(p)),
+      ...(opts.detailsArrayIndex !== undefined ? { arrayIndex: opts.detailsArrayIndex } : {}),
     });
   }
 
@@ -282,11 +286,11 @@ export async function seedApplicationDetailsDemo(
     },
   });
 
-  // Subsection under Experience — demonstrates a details panel on a SUBSECTION
-  // showing a repeating-array attribute (first qualification).
+  // Subsection under Experience — a details panel showing ALL qualifications
+  // (repeating array, one block per item — no arrayIndex pin).
   const subQuals = await createLevel({
     templateId,
-    name: 'Qualifications',
+    name: 'Qualifications (all)',
     type: LEVEL_TYPE.Subsection,
     order: 1,
     parentLevelId: secExperience,
@@ -305,6 +309,25 @@ export async function seedApplicationDetailsDemo(
       applicationDataPaths: ['qualifications[].title'],
     },
   });
+
+  // Three FIXED subsections, each pinned to one array element via arrayIndex —
+  // the "3 Qualification subsections ↔ one JSON array" pattern. Each panel
+  // resolves qualifications[i] (title/institution/year) for its own index.
+  for (let i = 0; i < 3; i += 1) {
+    await createLevel({
+      templateId,
+      name: `Qualification ${i + 1}`,
+      type: LEVEL_TYPE.Subsection,
+      order: 2 + i,
+      parentLevelId: secExperience,
+      detailsPaths: [
+        'qualifications[].title',
+        'qualifications[].institution',
+        'qualifications[].year',
+      ],
+      detailsArrayIndex: i,
+    });
+  }
   update('levels', { status: 'done' });
 
   // --- Assessment instance --------------------------------------------------

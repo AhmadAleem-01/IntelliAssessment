@@ -3,6 +3,7 @@ import {
   Button,
   Combobox,
   Dropdown,
+  Input,
   Option,
   Textarea,
   Spinner,
@@ -40,8 +41,7 @@ import type { LevelType } from '../templates/levels/levelTypes';
 import {
   flattenSchema,
   parseAppData,
-  resolvePath,
-  formatValue,
+  isRepeatingPath,
   type AppDataField,
 } from './appData';
 import {
@@ -51,6 +51,7 @@ import {
   type DetailsField,
   type DetailsLayout,
 } from './detailsLayout';
+import { DetailsPanel } from './DetailsPanel';
 
 const SCHEMA_AUTOSAVE_MS = 900;
 
@@ -418,6 +419,35 @@ export function DetailsBuilder({ templateId }: Props) {
                   Add a valid sample JSON above to populate the field list.
                 </span>
               )}
+              {/* Array-index pin: only relevant when the panel shows a
+                  repeating ([]) attribute. Lets a fixed subsection map to one
+                  element (e.g. "Qualification 2" → item 2). */}
+              {layout.fields.some((f) => isRepeatingPath(f.path)) && (
+                <label className={styles.fieldGroup} style={{ marginTop: 4 }}>
+                  <span className={styles.fieldLabel}>
+                    Show array item # (blank = list every item)
+                  </span>
+                  <Input
+                    type="number"
+                    min={1}
+                    style={{ maxWidth: 140 }}
+                    value={
+                      layout.arrayIndex === undefined ? '' : String(layout.arrayIndex + 1)
+                    }
+                    placeholder="all"
+                    onChange={(_, d) => {
+                      const n = d.value.trim();
+                      if (n === '') {
+                        commitLayout({ ...layout, arrayIndex: undefined });
+                        return;
+                      }
+                      const oneBased = Number(n);
+                      if (!Number.isFinite(oneBased) || oneBased < 1) return;
+                      commitLayout({ ...layout, arrayIndex: Math.floor(oneBased) - 1 });
+                    }}
+                  />
+                </label>
+              )}
             </div>
           )}
         </div>
@@ -436,23 +466,18 @@ export function DetailsBuilder({ templateId }: Props) {
             </div>
           ) : layout.fields.length === 0 ? (
             <div className={styles.previewEmpty}>No fields added yet.</div>
-          ) : (
-            <div className={styles.previewCard}>
-              <div className={styles.previewLevel}>
-                {selectedLevel?.dnx_name ?? 'Details'}
-              </div>
-              {layout.fields.map((f) => {
-                const resolved = parsedSchema ? resolvePath(parsedSchema, f.path) : undefined;
-                return (
-                  <div key={f.id} className={styles.previewRow}>
-                    <span className={styles.previewKey}>{f.label ?? f.path}</span>
-                    <span className={styles.previewVal}>
-                      {resolved === undefined ? '—' : formatValue(resolved)}
-                    </span>
-                  </div>
-                );
-              })}
+          ) : !parsedSchema ? (
+            <div className={styles.previewEmpty}>
+              Add a valid sample JSON above to preview resolved values.
             </div>
+          ) : (
+            // Render through the real DetailsPanel against the sample JSON so the
+            // preview matches the assessment exactly (incl. array-index pinning
+            // and per-item repeating blocks).
+            <DetailsPanel
+              storedLayout={serializeDetailsLayout(layout)}
+              applicationData={parsedSchema}
+            />
           )}
         </div>
       </div>

@@ -191,9 +191,10 @@ Uses the **separate** application-details dataset — click **Seed application-d
 
 1. Open **Application Details Demo — Priya Raman**. Between the Overview card and the checklist is the **Application details** card — showing the uploaded file's top-level fields with a green tick.
 2. Scroll into the checklist. The **Applicant** section shows a details panel (full name, DOB, nationality, city) resolved from the JSON; **Experience** shows years + prior-assessment.
-3. Open the **Qualifications** subsection — its panel renders **one block per qualification** (`#1 BSc Computer Science · University of Pune · 2013`, `#2 MSc Data Science · UNSW · 2019`), because the author bound a repeating `qualifications[].*` path.
+3. Open the **Qualifications (all)** subsection — its panel renders **one block per qualification** (`#1 BSc … · 2013`, `#2 MSc … · 2019`, `#3 Grad Cert … · 2022`), because the author bound a repeating `qualifications[].*` path with no index pin.
+4. Below it are **Qualification 1 / 2 / 3** — three *fixed* subsections, each pinned to one array element (item #1/#2/#3) via the panel's **"Show array item #"** setting. This is the "N subsections ↔ one JSON array" pattern: each subsection's panel resolves `qualifications[i]`.
 
-Talking point: *"The template author dragged JSON attributes onto each section; the assessor just uploads the applicant's JSON file and the panels fill in. A repeating array shows every item, not just the first."*
+Talking point: *"The author dragged JSON attributes onto each section; the assessor just uploads the applicant's JSON. A repeating panel can either list every array item, or pin to one item so a fixed subsection maps to one element of the array."*
 
 **AI judgement grounded in the JSON:**
 
