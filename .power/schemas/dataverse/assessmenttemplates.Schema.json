@@ -72,6 +72,14 @@
           "required": true,
           "maxLength": 100
         },
+        "dnx_application_schema": {
+          "type": "string",
+          "title": "Application Schema",
+          "x-ms-dataverse-attribute": "dnx_application_schema",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "dnx_application_schema",
+          "maxLength": 1000000
+        },
         "dnx_assessment_templateid": {
           "type": "string",
           "title": "Assessment Template",

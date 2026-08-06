@@ -50,6 +50,8 @@ export interface Dnx_assessment_instances extends Dnx_assessment_instancesBase {
   createdon?: string;
   createdonbehalfbyname?: string;
   createdonbehalfbyyominame: string;
+  dnx_application_details?: string;
+  dnx_application_details_name?: string;
   dnx_assessmenttemplatename?: string;
   dnx_outcomename?: string;
   dnx_projectname?: string;
@@ -83,3 +85,4 @@ export interface Dnx_assessment_instances extends Dnx_assessment_instancesBase {
   owninguser?: object;
   _owninguser_value?: string;
 }
+export type Dnx_assessment_instancesUploadColumnName = 'dnx_application_details';

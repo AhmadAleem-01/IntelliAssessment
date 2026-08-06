@@ -35,6 +35,7 @@ export interface Dnx_assessment_levelsBase {
   "dnx_Assessment_Template@odata.bind"?: string;
   dnx_data_type?: Dnx_assessment_levelsdnx_data_type;
   dnx_description?: string;
+  dnx_details_layout?: string;
   dnx_document_type_reference?: string;
   dnx_hint_text?: string;
   dnx_include_in_letter?: boolean;

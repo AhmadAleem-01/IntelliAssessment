@@ -19,10 +19,11 @@
  *   fileVariable: "q1-resume"
  *   query:        "If the extracted text contains a bachelor's degree, set true."
  *
- * v1 supports a single file variable per question. The shape is forward-
- * compatible — a future version can widen `fileVariable` to an array, or add an
- * `applicationDataQuery` field for the JSON-application-details scenario, without
- * breaking this parser.
+ * v1 supported a single file variable + query. It now also carries
+ * **applicationDataPaths** — dot-paths into the assessment's application-details
+ * JSON (see the Details tab) that this question's AI judgement may use. The
+ * shape stays forward-compatible; extra keys survive only if added to both
+ * parse and serialize.
  *
  * ## Back-compat
  *
@@ -36,12 +37,22 @@ export interface EvidenceBinding {
   fileVariable: string;
   /** Natural-language extraction + answer instruction for the AI. */
   query: string;
+  /**
+   * Application-details JSON attribute paths (e.g. `applicant.dob`) whose values
+   * are injected into this question's AI prompt as structured facts. Empty /
+   * absent when the question doesn't use application data.
+   */
+  applicationDataPaths?: string[];
 }
 
 /** True when a binding carries anything worth persisting. */
 export function isEmptyBinding(b: EvidenceBinding | undefined): boolean {
   if (!b) return true;
-  return !b.fileVariable.trim() && !b.query.trim();
+  return (
+    !b.fileVariable.trim() &&
+    !b.query.trim() &&
+    (b.applicationDataPaths?.length ?? 0) === 0
+  );
 }
 
 export function parseEvidenceBinding(
@@ -58,7 +69,12 @@ export function parseEvidenceBinding(
         const fileVariable =
           typeof parsed.fileVariable === 'string' ? parsed.fileVariable : '';
         const query = typeof parsed.query === 'string' ? parsed.query : '';
-        if (fileVariable || query) return { fileVariable, query };
+        const applicationDataPaths = Array.isArray(parsed.applicationDataPaths)
+          ? parsed.applicationDataPaths.filter((p): p is string => typeof p === 'string')
+          : undefined;
+        if (fileVariable || query || (applicationDataPaths && applicationDataPaths.length)) {
+          return { fileVariable, query, applicationDataPaths };
+        }
       }
     } catch {
       /* fall through — treat as legacy plain text */
@@ -73,9 +89,11 @@ export function serializeEvidenceBinding(
   binding: EvidenceBinding | undefined,
 ): string | undefined {
   if (isEmptyBinding(binding)) return undefined;
+  const paths = (binding!.applicationDataPaths ?? []).map((p) => p.trim()).filter(Boolean);
   const clean: EvidenceBinding = {
     fileVariable: binding!.fileVariable.trim(),
     query: binding!.query.trim(),
+    ...(paths.length ? { applicationDataPaths: paths } : {}),
   };
   return JSON.stringify(clean);
 }

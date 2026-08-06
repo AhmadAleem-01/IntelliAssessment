@@ -190,6 +190,14 @@
           "x-ms-schema-name": "dnx_Description",
           "maxLength": 100
         },
+        "dnx_details_layout": {
+          "type": "string",
+          "title": "Details Layout",
+          "x-ms-dataverse-attribute": "dnx_details_layout",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "dnx_details_layout",
+          "maxLength": 1000000
+        },
         "dnx_document_type_reference": {
           "type": "string",
           "title": "Document Type Reference",

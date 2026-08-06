@@ -251,6 +251,8 @@ export interface UpsertResponseInput {
   ai?: {
     confidence: number;
     sourceSummary: string;
+    /** Application-details attribute paths this judgement used (provenance). */
+    sourceAttributes?: string[];
   };
 }
 
@@ -313,12 +315,19 @@ function aiColumns(
       dnx_manual_override: false,
       dnx_confidence_score: ai.confidence,
       dnx_ai_source_summary: ai.sourceSummary.slice(0, 2000),
-    };
+      // JSON array of attribute paths used, or '' when the judgement was
+      // evidence-only — cleared explicitly so a re-fill doesn't keep stale ones.
+      dnx_ai_source_attributes:
+        ai.sourceAttributes && ai.sourceAttributes.length
+          ? JSON.stringify(ai.sourceAttributes)
+          : '',
+    } as Partial<Dnx_assessment_responsesBase>;
   }
   return {
     dnx_ai_populated: false,
     dnx_manual_override: true,
-  };
+    dnx_ai_source_attributes: '',
+  } as Partial<Dnx_assessment_responsesBase>;
 }
 
 /**

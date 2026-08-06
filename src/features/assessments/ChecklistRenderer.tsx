@@ -16,6 +16,7 @@ import {
 } from '@fluentui/react-icons';
 import { useTemplateLevels } from '../templates/levels/api';
 import { buildTree, type LevelNode } from '../templates/levels/treeBuilder';
+import { DetailsPanel } from '../applicationDetails/DetailsPanel';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import type { Dnx_reviewer_comments } from '../../generated/models/Dnx_reviewer_commentsModel';
 import type { DataType, LevelType } from '../templates/levels/levelTypes';
@@ -296,6 +297,12 @@ interface Props {
    * that don't gate keep prior behaviour.
    */
   canAssess?: boolean;
+  /**
+   * The assessment's parsed application-details JSON, so Section/Subsection
+   * levels with an authored details layout can show resolved attribute values.
+   * Null / omitted when the instance has no application-details file.
+   */
+  applicationData?: Record<string, unknown> | null;
 }
 
 export function ChecklistRenderer({
@@ -306,6 +313,7 @@ export function ChecklistRenderer({
   pendingReview,
   submittedOn,
   canAssess = true,
+  applicationData = null,
 }: Props) {
   const styles = useStyles();
   const reopen = useReopenAssessment(instanceId);
@@ -536,6 +544,7 @@ export function ChecklistRenderer({
           onResolveFlag={(commentId) => resolveFlag.mutate(commentId)}
           resolvingFlagId={resolveFlag.isPending ? resolveFlag.variables ?? null : null}
           disabled={inputsLocked || upsert.isPending}
+          applicationData={applicationData}
         />
       ))}
     </div>
@@ -553,6 +562,8 @@ interface SectionBlockProps {
   onResolveFlag: (commentId: string) => void;
   resolvingFlagId: string | null;
   disabled: boolean;
+  /** Parsed application-details JSON for resolving per-level detail panels. */
+  applicationData: Record<string, unknown> | null;
 }
 
 /**
@@ -601,6 +612,7 @@ function SectionBlock({
   onResolveFlag,
   resolvingFlagId,
   disabled,
+  applicationData,
 }: SectionBlockProps) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(true);
@@ -644,6 +656,10 @@ function SectionBlock({
       </div>
       {expanded && (
         <div className={styles.sectionBody}>
+          <DetailsPanel
+            storedLayout={node.level.dnx_details_layout}
+            applicationData={applicationData}
+          />
           {directQuestions.map((q) => (
             <QuestionItem
               key={q.level.dnx_assessment_levelid}
@@ -672,6 +688,7 @@ function SectionBlock({
               onResolveFlag={onResolveFlag}
               resolvingFlagId={resolvingFlagId}
               disabled={disabled}
+              applicationData={applicationData}
             />
           ))}
         </div>
@@ -693,6 +710,7 @@ function SubsectionBlock({
   onResolveFlag,
   resolvingFlagId,
   disabled,
+  applicationData,
 }: SubsectionBlockProps) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(true);
@@ -741,6 +759,10 @@ function SubsectionBlock({
             <div className={styles.subsectionDesc}>{node.level.dnx_description}</div>
           )}
           <div className={styles.subsectionBody}>
+            <DetailsPanel
+              storedLayout={node.level.dnx_details_layout}
+              applicationData={applicationData}
+            />
             {node.children
               .filter((c) => (c.level.dnx_assessment_level_type as LevelType) === 3)
               .map((q) => (

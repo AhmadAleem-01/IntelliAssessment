@@ -103,6 +103,14 @@
           "x-ms-schema-name": "dnx_ai_populatedName",
           "x-ms-read-only": true
         },
+        "dnx_ai_source_attributes": {
+          "type": "string",
+          "title": "AI Source Attributes",
+          "x-ms-dataverse-attribute": "dnx_ai_source_attributes",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "dnx_AI_Source_Attributes",
+          "maxLength": 1000000
+        },
         "dnx_ai_source_summary": {
           "type": "string",
           "title": "AI Source Summary",

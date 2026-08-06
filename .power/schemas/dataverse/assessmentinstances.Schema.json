@@ -72,6 +72,23 @@
           "required": true,
           "maxLength": 100
         },
+        "dnx_application_details": {
+          "type": "string",
+          "title": "Application Details",
+          "x-ms-dataverse-attribute": "dnx_application_details",
+          "x-ms-dataverse-type": "FileType",
+          "x-ms-schema-name": "dnx_application_details",
+          "x-ms-read-only": true
+        },
+        "dnx_application_details_name": {
+          "type": "string",
+          "title": "dnx_application_details_name",
+          "x-ms-dataverse-attribute": "dnx_application_details_name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "dnx_application_details_Name",
+          "x-ms-read-only": true,
+          "maxLength": 200
+        },
         "dnx_assessment_instanceid": {
           "type": "string",
           "title": "Assessment Instance",

@@ -15,6 +15,10 @@ import {
 import { seedDemo, type SeedStep, type SeedResult } from './seedDemo';
 import { seedAiDemo, type AiSeedResult } from './seedAiDemo';
 import { seedLetterDemo, type LetterSeedResult } from './seedLetterDemo';
+import {
+  seedApplicationDetailsDemo,
+  type AppDetailsSeedResult,
+} from './seedApplicationDetailsDemo';
 
 const useStyles = makeStyles({
   root: {
@@ -144,16 +148,22 @@ export function SeedDemoPage() {
   const [result, setResult] = useState<SeedResult | null>(null);
   const [aiResult, setAiResult] = useState<AiSeedResult | null>(null);
   const [letterResult, setLetterResult] = useState<LetterSeedResult | null>(null);
+  const [appDataResult, setAppDataResult] = useState<AppDetailsSeedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState<null | 'full' | 'ai' | 'letter'>(null);
+  const [running, setRunning] = useState<null | 'full' | 'ai' | 'letter' | 'appdata'>(null);
 
   /** Shared runner for all seeders — same step-streaming + error handling. */
-  async function run<T>(kind: 'full' | 'ai' | 'letter', fn: (p: typeof setSteps) => Promise<T>, onDone: (r: T) => void) {
+  async function run<T>(
+    kind: 'full' | 'ai' | 'letter' | 'appdata',
+    fn: (p: typeof setSteps) => Promise<T>,
+    onDone: (r: T) => void,
+  ) {
     setRunning(kind);
     setError(null);
     setResult(null);
     setAiResult(null);
     setLetterResult(null);
+    setAppDataResult(null);
     setSteps([]);
     try {
       onDone(await fn(setSteps));
@@ -192,6 +202,10 @@ export function SeedDemoPage() {
           that's fully answered with a varied mix. The letter layout is
           pre-built with a Grouped subsections block, so View letter shows the
           grouping immediately.
+          <br />
+          <b>Seed application-details demo</b> — a template with a sample JSON schema,
+          detail panels on a section + subsection, and AI bindings that reference JSON
+          attributes; plus an assessment with its matching JSON file already uploaded.
         </div>
       </div>
 
@@ -227,6 +241,14 @@ export function SeedDemoPage() {
             onClick={() => run('letter', seedLetterDemo, setLetterResult)}
           >
             {running === 'letter' ? 'Seeding…' : 'Seed letter demo'}
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<Sparkle16Filled />}
+            disabled={running !== null}
+            onClick={() => run('appdata', seedApplicationDetailsDemo, setAppDataResult)}
+          >
+            {running === 'appdata' ? 'Seeding…' : 'Seed application-details demo'}
           </Button>
         </div>
 
@@ -349,6 +371,68 @@ export function SeedDemoPage() {
             >
               → Open the letter demo project
             </Link>
+          </div>
+        )}
+
+        {appDataResult && (
+          <div className={styles.resultLinks}>
+            <MessageBar intent="success" style={{ marginTop: 16 }}>
+              <MessageBarBody>
+                Application-details demo seeded. The assessment already has its JSON
+                file uploaded — open it to see the detail panels resolve, then run AI
+                auto-fill (a "Judged from application data" group answers from the JSON
+                with no evidence file needed).
+              </MessageBarBody>
+            </MessageBar>
+            <Link
+              className={styles.resultLink}
+              to={`/assessments/${appDataResult.instanceId}`}
+            >
+              → Open the demo assessment (detail panels + AI auto-fill from JSON)
+            </Link>
+            <Link
+              className={styles.resultLink}
+              to={`/templates/${appDataResult.templateId}/edit`}
+            >
+              → Open the template (Details tab = sample JSON + panels; AI conditioning = bindings)
+            </Link>
+            <Link className={styles.resultLink} to={`/projects/${appDataResult.projectId}`}>
+              → Open the demo project
+            </Link>
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+                Template sample JSON (copy into the Details tab)
+              </summary>
+              <pre
+                style={{
+                  background: 'var(--color-background-secondary)',
+                  border: '0.5px solid var(--color-border-tertiary)',
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 12,
+                  overflow: 'auto',
+                }}
+              >
+                {appDataResult.sampleJson}
+              </pre>
+            </details>
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+                Per-assessment JSON (already uploaded; copy to reuse elsewhere)
+              </summary>
+              <pre
+                style={{
+                  background: 'var(--color-background-secondary)',
+                  border: '0.5px solid var(--color-border-tertiary)',
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 12,
+                  overflow: 'auto',
+                }}
+              >
+                {appDataResult.instanceJson}
+              </pre>
+            </details>
           </div>
         )}
       </div>

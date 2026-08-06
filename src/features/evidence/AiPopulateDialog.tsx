@@ -28,6 +28,7 @@ import {
   toAiQuestions,
   groupByFileVariable,
   type AiSuggestion,
+  type AiQuestion,
   type FileVariableGroup,
 } from './aiPopulate';
 
@@ -277,6 +278,12 @@ interface Props {
   onPersistMapping?: (mapping: Record<string, string>) => void;
   /** Called once per accepted suggestion — caller persists via useUpsertResponse. */
   onAccept: (accepted: AcceptedSuggestion) => void;
+  /**
+   * The assessment's parsed application-details JSON, so questions bound to JSON
+   * attributes (in the AI conditioning tab) can inject those facts into their
+   * prompt. Null / omitted when the instance has no application-details file.
+   */
+  applicationData?: Record<string, unknown> | null;
 }
 
 /**
@@ -302,6 +309,7 @@ export function AiPopulateDialog({
   persistedMappingJson,
   onPersistMapping,
   onAccept,
+  applicationData,
 }: Props) {
   const styles = useStyles();
   const populate = useAiPopulateMapped(assessmentName);
@@ -321,7 +329,19 @@ export function AiPopulateDialog({
     () => groupByFileVariable(aiQuestions),
     [aiQuestions],
   );
-  // Default selection: every bound question that isn't already answered.
+  // Questions with no file variable but WITH application-data attributes — these
+  // are judged from the JSON alone (no evidence file). Only meaningful when the
+  // instance actually supplied an application-details file.
+  const appOnlyQuestions = useMemo(
+    () =>
+      applicationData
+        ? unbound.filter((q) => (q.applicationDataPaths?.length ?? 0) > 0)
+        : [],
+    [unbound, applicationData],
+  );
+
+  // Default selection: every bound question (file-grouped OR JSON-only) that
+  // isn't already answered.
   const defaultSelected = useMemo(() => {
     const s = new Set<string>();
     for (const g of groups) {
@@ -329,8 +349,11 @@ export function AiPopulateDialog({
         if (!answeredLevelIds.has(q.levelId)) s.add(q.levelId);
       }
     }
+    for (const q of appOnlyQuestions) {
+      if (!answeredLevelIds.has(q.levelId)) s.add(q.levelId);
+    }
     return s;
-  }, [groups, answeredLevelIds]);
+  }, [groups, appOnlyQuestions, answeredLevelIds]);
   const levelById = useMemo(
     () => new Map(questions.map((q) => [q.dnx_assessment_levelid, q] as const)),
     [questions],
@@ -405,17 +428,22 @@ export function AiPopulateDialog({
       questions: g.questions.filter((q) => selected.has(q.levelId)),
     }))
     .filter((g) => g.questions.length > 0 && mapping[g.fileVariable]);
-  const selectedRunCount = runnableGroups.reduce(
-    (n, g) => n + g.questions.length,
-    0,
-  );
+  // JSON-only questions the assessor kept selected — run with no evidence file.
+  const runnableAppOnly = appOnlyQuestions.filter((q) => selected.has(q.levelId));
+  const selectedRunCount =
+    runnableGroups.reduce((n, g) => n + g.questions.length, 0) + runnableAppOnly.length;
 
   function run() {
     // Persist the assessor's effective picks so reopening restores them.
     onPersistMapping?.(mapping);
     setAccepted(new Set());
     setPhase('review');
-    populate.mutate({ groups: runnableGroups, mapping });
+    populate.mutate({
+      groups: runnableGroups,
+      mapping,
+      applicationData,
+      applicationOnlyQuestions: runnableAppOnly,
+    });
   }
 
   function acceptOne(s: AiSuggestion) {
@@ -448,7 +476,8 @@ export function AiPopulateDialog({
               <MapPhase
                 styles={styles}
                 groups={groups}
-                unboundCount={unbound.length}
+                appOnlyQuestions={appOnlyQuestions}
+                skippedCount={unbound.length - appOnlyQuestions.length}
                 availableFiles={availableFiles}
                 mapping={mapping}
                 onSetVar={setVar}
@@ -573,7 +602,7 @@ export function AiPopulateDialog({
                   </Button>
                 </div>
                 <span className={styles.footerStatus}>
-                  {groups.length === 0
+                  {groups.length === 0 && appOnlyQuestions.length === 0
                     ? 'No AI bindings on this template.'
                     : `${mappedCount}/${groups.length} files mapped · ${selectedRunCount} question${selectedRunCount === 1 ? '' : 's'} selected`}
                 </span>
@@ -627,7 +656,8 @@ export function AiPopulateDialog({
 function MapPhase({
   styles,
   groups,
-  unboundCount,
+  appOnlyQuestions,
+  skippedCount,
   availableFiles,
   mapping,
   onSetVar,
@@ -637,7 +667,10 @@ function MapPhase({
 }: {
   styles: ReturnType<typeof useStyles>;
   groups: FileVariableGroup[];
-  unboundCount: number;
+  /** Questions judged from application-data JSON alone (no file variable). */
+  appOnlyQuestions: AiQuestion[];
+  /** Questions with neither a file variable nor application-data — truly skipped. */
+  skippedCount: number;
   availableFiles: string[];
   mapping: Record<string, string>;
   onSetVar: (variable: string, file: string) => void;
@@ -645,14 +678,14 @@ function MapPhase({
   answeredLevelIds: Set<string>;
   onToggleQuestion: (levelId: string) => void;
 }) {
-  if (groups.length === 0) {
-    // Nothing to map: no question carries a file variable. (Answered / hidden
-    // questions ARE offered now, so the only empty reason left is "none bound".)
+  if (groups.length === 0 && appOnlyQuestions.length === 0) {
+    // Nothing to run: no question carries a file variable OR bound
+    // application-data. (Answered / hidden questions ARE offered now.)
     return (
       <div className={styles.empty}>
         No questions on this template have an AI binding yet. Open the template in the
         editor and add one in the <b>AI conditioning</b> tab — give the question a{' '}
-        <b>file variable</b> (a query alone isn’t enough to map a file).
+        <b>file variable</b> and/or bind <b>application-data attributes</b>.
       </div>
     );
   }
@@ -662,8 +695,8 @@ function MapPhase({
         Map each evidence file to one of your uploads, then tick the questions to run.
         Only ticked questions are sent to the assistant — already-answered ones are
         unticked by default so they aren’t re-queried.
-        {unboundCount > 0 &&
-          ` (${unboundCount} question${unboundCount === 1 ? '' : 's'} have no file variable and are skipped.)`}
+        {skippedCount > 0 &&
+          ` (${skippedCount} question${skippedCount === 1 ? '' : 's'} have no file variable or application data and are skipped.)`}
       </div>
       {availableFiles.length === 0 && (
         <MessageBar intent="warning" style={{ marginBottom: 12 }}>
@@ -730,6 +763,39 @@ function MapPhase({
             </div>
           );
         })}
+        {appOnlyQuestions.length > 0 && (
+          <div className={styles.mapGroup}>
+            <div className={styles.mapRow}>
+              <div className={styles.mapInfo}>
+                <span className={styles.mapVar}>
+                  <Document16Regular />
+                  Judged from application data
+                </span>
+                <span className={styles.mapCount}>
+                  {appOnlyQuestions.length} question{appOnlyQuestions.length === 1 ? '' : 's'} · no file
+                </span>
+              </div>
+            </div>
+            <div className={styles.qPickList}>
+              {appOnlyQuestions.map((q) => (
+                <Checkbox
+                  key={q.levelId}
+                  className={styles.qPick}
+                  checked={selected.has(q.levelId)}
+                  onChange={() => onToggleQuestion(q.levelId)}
+                  label={
+                    <span className={styles.qPickLabel}>
+                      {q.label}
+                      {answeredLevelIds.has(q.levelId) && (
+                        <span className={styles.qPickAnswered}>answered</span>
+                      )}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

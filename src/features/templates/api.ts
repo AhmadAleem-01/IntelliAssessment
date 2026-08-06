@@ -148,6 +148,40 @@ export function useSaveLetterLayout(id: string) {
 }
 
 /**
+ * Persist the application-details **sample JSON** (the shape authors map against
+ * — see the Details tab) into `dnx_application_schema`. Targeted PATCH of just
+ * that column with an optimistic cache update, mirroring `useSaveLetterLayout`.
+ * Pass the raw JSON string (empty string clears it).
+ */
+export function useSaveApplicationSchema(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (applicationSchema: string): Promise<void> => {
+      const r = await Dnx_assessment_templatesService.update(
+        id,
+        {
+          dnx_application_schema: applicationSchema,
+        } as Partial<Omit<Dnx_assessment_templatesBase, 'dnx_assessment_templateid'>>,
+      );
+      if (!r.success) {
+        console.error('[save application schema] failed', r.error);
+        throw new Error(r.error?.message ?? 'Failed to save application schema');
+      }
+    },
+    onSuccess: (_data, applicationSchema) => {
+      const cached = qc.getQueryData<Dnx_assessment_templates>(templateKeys.detail(id));
+      if (cached) {
+        qc.setQueryData<Dnx_assessment_templates>(templateKeys.detail(id), {
+          ...cached,
+          dnx_application_schema: applicationSchema,
+        });
+      }
+      qc.invalidateQueries({ queryKey: templateKeys.detail(id) });
+    },
+  });
+}
+
+/**
  * Upload a background image for the outcome letter into the template's
  * `dnx_letter_background` **File** column (File over Image — Image columns
  * downscale + re-encode, ruining a crisp logo; File stores exact bytes; see

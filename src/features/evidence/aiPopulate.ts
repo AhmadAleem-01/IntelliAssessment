@@ -5,6 +5,7 @@ import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessmen
 import type { DataType } from '../templates/levels/levelTypes';
 import { parseOptions } from '../templates/levels/options';
 import { parseEvidenceBinding } from '../templates/levels/evidenceBinding';
+import { resolvePaths } from '../applicationDetails/appData';
 
 /**
  * M6b — AI-assisted answer auto-population.
@@ -39,6 +40,17 @@ export interface AiQuestion {
   query?: string;
   /** The file variable this question's evidence is expected to come from. */
   fileVariable?: string;
+  /**
+   * Application-details attribute paths the author bound to this question (from
+   * the evidence binding). Resolved against the instance JSON into
+   * `applicationData` before the prompt is built.
+   */
+  applicationDataPaths?: string[];
+  /**
+   * Resolved `{ path: displayValue }` for this question's bound attributes,
+   * injected into the prompt as structured facts. Populated at runtime.
+   */
+  applicationData?: Record<string, string>;
 }
 
 /**
@@ -87,6 +99,12 @@ export interface AiSuggestion {
   confidence: number;
   /** One-line justification the model gives — surfaced as the source summary. */
   rationale: string;
+  /**
+   * Which of the question's bound application-data attribute paths the model
+   * said it relied on (echoed back + validated against the offered paths).
+   * Empty when the judgement was evidence-only.
+   */
+  usedAttributes?: string[];
 }
 
 const DATA_TYPE_NAME: Record<DataType, string> = {
@@ -118,6 +136,9 @@ export function toAiQuestions(levels: Dnx_assessment_levels[]): AiQuestion[] {
         hint: l.dnx_hint_text ?? undefined,
         query: binding?.query || undefined,
         fileVariable: binding?.fileVariable || undefined,
+        applicationDataPaths: binding?.applicationDataPaths?.length
+          ? binding.applicationDataPaths
+          : undefined,
       };
     });
 }
@@ -142,25 +163,34 @@ export function buildPrompt(evidenceText: string, questions: AiQuestion[]): stri
     ...(q.query ? { instruction: q.query } : {}),
     ...(q.options.length ? { allowedOptions: q.options } : {}),
     ...(q.hint ? { hint: q.hint } : {}),
+    ...(q.applicationData && Object.keys(q.applicationData).length
+      ? { applicationData: q.applicationData }
+      : {}),
   }));
 
   return [
     'You are an assessment assistant for Recognition of Prior Learning. You are given',
     'the text extracted from a piece of evidence and a list of questions. For each',
-    'question you can confidently answer FROM THE EVIDENCE ALONE, propose an answer.',
+    'question you can confidently answer, propose an answer.',
     '',
     'Rules:',
     '- When a question carries an "instruction", follow it exactly — it is the',
-    '  author\'s rule for how to derive the answer from the evidence.',
-    '- Only answer questions the evidence actually supports. Skip anything you cannot',
-    '  ground in the text — do NOT guess.',
+    '  author\'s rule for how to derive the answer.',
+    '- Some questions include "applicationData": structured facts about the applicant',
+    '  (drawn from their application). Treat these as trusted inputs and use them',
+    '  together with the evidence text to answer that question.',
+    '- Only answer questions the evidence and/or applicationData actually support. Skip',
+    '  anything you cannot ground — do NOT guess.',
     '- Respect each question\'s type. For single/multi choice, use ONLY the allowed',
     '  options, copied verbatim. For boolean, use true/false. For date, use YYYY-MM-DD.',
-    '- confidence is your certainty from 0 to 1 (1 = the evidence states it explicitly).',
-    '- rationale is one short sentence quoting or pointing to the supporting text.',
+    '- confidence is your certainty from 0 to 1 (1 = a source states it explicitly).',
+    '- rationale is one short sentence pointing to the supporting evidence or fact.',
+    '- usedAttributes is an array of the applicationData keys you actually relied on for',
+    '  that question (copy the keys verbatim); use [] if you used none.',
     '',
     'Respond with ONLY a JSON array (no markdown fences, no prose). Each element:',
-    '{ "id": "<question id>", "value": <answer>, "confidence": <0-1>, "rationale": "<why>" }',
+    '{ "id": "<question id>", "value": <answer>, "confidence": <0-1>, "rationale": "<why>",',
+    '  "usedAttributes": ["<applicationData key>", …] }',
     'Return [] if nothing can be answered.',
     '',
     '--- EVIDENCE TEXT ---',
@@ -216,6 +246,13 @@ export function parseAiResponse(
     const value = coerceValue(r.value, q);
     if (value === null) continue; // model proposed nothing usable for this one
 
+    // Keep only echoed attribute keys the question actually offered — the model
+    // sometimes invents or reformats keys.
+    const offered = new Set(q.applicationDataPaths ?? []);
+    const usedAttributes = Array.isArray(r.usedAttributes)
+      ? r.usedAttributes.filter((a): a is string => typeof a === 'string' && offered.has(a))
+      : [];
+
     out.push({
       levelId,
       value,
@@ -224,6 +261,7 @@ export function parseAiResponse(
         typeof r.rationale === 'string' && r.rationale.trim()
           ? r.rationale.trim()
           : 'Proposed from evidence text.',
+      ...(usedAttributes.length ? { usedAttributes } : {}),
     });
   }
   return out;
@@ -328,12 +366,22 @@ async function extractFileText(
   return ex.data?.content ?? '';
 }
 
-/** Build + send one AI call for a set of questions over already-extracted text. */
+/**
+ * Build + send one AI call for a set of questions over already-extracted text.
+ * Runs as long as there's *some* grounding — evidence text OR at least one
+ * question carrying resolved `applicationData` — so JSON-only questions (no
+ * evidence file) are still answered.
+ */
 async function askForGroup(
   evidenceText: string,
   questions: AiQuestion[],
 ): Promise<AiSuggestion[]> {
-  if (!evidenceText.trim() || questions.length === 0) return [];
+  if (questions.length === 0) return [];
+  const hasEvidence = evidenceText.trim().length > 0;
+  const hasAppData = questions.some(
+    (q) => q.applicationData && Object.keys(q.applicationData).length > 0,
+  );
+  if (!hasEvidence && !hasAppData) return [];
   const prompt = buildPrompt(evidenceText, questions);
   const ai = await AIAgentFlowService.Run({ text: prompt });
   if (!ai.success) {
@@ -369,13 +417,36 @@ export function useAiPopulateMapped(assessmentName: string) {
       groups: FileVariableGroup[];
       /** fileVariable → real uploaded file name. Unmapped variables are skipped. */
       mapping: Record<string, string>;
+      /**
+       * The assessment's application-details JSON (parsed). When present, each
+       * question's bound `applicationDataPaths` are resolved against it and
+       * injected into the prompt as `applicationData`.
+       */
+      applicationData?: Record<string, unknown> | null;
+      /**
+       * Questions with NO evidence file variable but WITH bound application-data
+       * attributes — judged from the JSON alone (no OCR). Sent as one extra AI
+       * call with no evidence text.
+       */
+      applicationOnlyQuestions?: AiQuestion[];
     }): Promise<MappedPopulateResult> => {
+      const appData = input.applicationData ?? null;
+      // Resolve each question's bound attribute paths against the instance JSON,
+      // producing the `applicationData` map the prompt injects.
+      const withAppData = (qs: AiQuestion[]): AiQuestion[] =>
+        qs.map((q) =>
+          appData && q.applicationDataPaths?.length
+            ? { ...q, applicationData: resolvePaths(appData, q.applicationDataPaths) }
+            : q,
+        );
+
       const mapped = input.groups.filter((g) => input.mapping[g.fileVariable]);
-      const questionsConsidered = mapped.reduce(
-        (n, g) => n + g.questions.length,
-        0,
-      );
-      if (mapped.length === 0) {
+      // JSON-only questions run whenever we actually have application data to
+      // ground them; otherwise there'd be nothing to judge from.
+      const appOnly = appData ? input.applicationOnlyQuestions ?? [] : [];
+      const questionsConsidered =
+        mapped.reduce((n, g) => n + g.questions.length, 0) + appOnly.length;
+      if (mapped.length === 0 && appOnly.length === 0) {
         return { suggestions: [], warnings: [], questionsConsidered: 0 };
       }
 
@@ -396,25 +467,36 @@ export function useAiPopulateMapped(assessmentName: string) {
         }),
       );
 
-      // One AI call per group, in parallel. Each group only sees its file's text.
-      const perGroup = await Promise.all(
-        mapped.map(async (g) => {
-          const file = input.mapping[g.fileVariable];
-          const text = textByFile.get(file) ?? '';
-          if (!text.trim()) {
-            // Only warn if extraction didn't already warn for this file.
-            return [] as AiSuggestion[];
-          }
-          try {
-            return await askForGroup(text, g.questions);
-          } catch (e) {
-            warnings.push(
-              `${g.fileVariable}: ${(e as Error).message}`,
-            );
-            return [] as AiSuggestion[];
-          }
-        }),
-      );
+      // One AI call per file group, plus (if any) one call for the JSON-only
+      // questions with no evidence text — all in parallel.
+      const groupCalls = mapped.map(async (g) => {
+        const file = input.mapping[g.fileVariable];
+        const text = textByFile.get(file) ?? '';
+        if (!text.trim()) {
+          // Only warn if extraction didn't already warn for this file.
+          return [] as AiSuggestion[];
+        }
+        try {
+          return await askForGroup(text, withAppData(g.questions));
+        } catch (e) {
+          warnings.push(`${g.fileVariable}: ${(e as Error).message}`);
+          return [] as AiSuggestion[];
+        }
+      });
+      const appOnlyCall =
+        appOnly.length > 0
+          ? [
+              (async () => {
+                try {
+                  return await askForGroup('', withAppData(appOnly));
+                } catch (e) {
+                  warnings.push(`application data: ${(e as Error).message}`);
+                  return [] as AiSuggestion[];
+                }
+              })(),
+            ]
+          : [];
+      const perGroup = await Promise.all([...groupCalls, ...appOnlyCall]);
 
       // Flatten, de-duping by level id (a question can only live in one group,
       // so collisions shouldn't happen — but guard anyway, last write wins).

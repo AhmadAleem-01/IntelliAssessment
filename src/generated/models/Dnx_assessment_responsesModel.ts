@@ -15,6 +15,7 @@ export type Dnx_assessment_responsesstatuscode = keyof typeof Dnx_assessment_res
 
 export interface Dnx_assessment_responsesBase {
   dnx_ai_populated?: boolean;
+  dnx_ai_source_attributes?: string;
   dnx_ai_source_summary?: string;
   dnx_answered_on?: string;
   "dnx_Assessment@odata.bind"?: string;

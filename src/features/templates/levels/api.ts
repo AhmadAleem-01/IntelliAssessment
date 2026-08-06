@@ -238,6 +238,34 @@ export function useUpdateEvidenceBinding(templateId: string) {
   });
 }
 
+/**
+ * Patch ONLY a Section/Subsection level's application-details layout
+ * (`dnx_details_layout`, which holds the drag-drop list of JSON attribute paths
+ * to show at assessment time — see the Details tab). Mirrors
+ * `useUpdateEvidenceBinding`: a targeted single-column PATCH so authoring the
+ * details layout doesn't round-trip the whole level form. Empty string clears.
+ */
+export function useUpdateDetailsLayout(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { levelId: string; detailsLayout: string }): Promise<void> => {
+      const r = await Dnx_assessment_levelsService.update(
+        params.levelId,
+        {
+          dnx_details_layout: params.detailsLayout,
+        } as unknown as Partial<Omit<Dnx_assessment_levelsBase, 'dnx_assessment_levelid'>>,
+      );
+      if (!r.success) {
+        console.error('[update details layout] failed', r.error);
+        throw new Error(r.error?.message ?? 'Failed to save details layout');
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: levelKeys.byTemplate(templateId) });
+    },
+  });
+}
+
 export function useDuplicateLevel(templateId: string) {
   const qc = useQueryClient();
   return useMutation({

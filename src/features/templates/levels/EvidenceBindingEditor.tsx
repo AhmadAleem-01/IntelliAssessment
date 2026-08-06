@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Field,
   Input,
   Textarea,
   Button,
+  Combobox,
+  Option,
+  Tag,
   MessageBar,
   MessageBarBody,
   makeStyles,
@@ -11,6 +14,8 @@ import {
 import { Save16Regular, Dismiss16Regular } from '@fluentui/react-icons';
 import type { Dnx_assessment_levels } from '../../../generated/models/Dnx_assessment_levelsModel';
 import { useUpdateEvidenceBinding } from './api';
+import { useTemplate } from '../api';
+import { flattenSchema, parseAppData } from '../../applicationDetails/appData';
 import {
   parseEvidenceBinding,
   serializeEvidenceBinding,
@@ -27,6 +32,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
   },
   clearBtn: { marginRight: 'auto' },
+  chips: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' },
 });
 
 const EMPTY: EvidenceBinding = { fileVariable: '', query: '' };
@@ -48,9 +54,25 @@ interface Props {
 export function EvidenceBindingEditor({ level, templateId, onSaved }: Props) {
   const styles = useStyles();
   const save = useUpdateEvidenceBinding(templateId);
+  const { data: template } = useTemplate(templateId);
   const [binding, setBinding] = useState<EvidenceBinding>(
     () => parseEvidenceBinding(level.dnx_document_type_reference) ?? { ...EMPTY },
   );
+
+  // Application-details attributes available to bind (from the template's
+  // sample JSON authored in the Details tab). Empty when no schema is set.
+  const attrFields = useMemo(
+    () => flattenSchema(parseAppData(template?.dnx_application_schema)),
+    [template?.dnx_application_schema],
+  );
+  const selectedPaths = binding.applicationDataPaths ?? [];
+  function togglePath(path: string) {
+    setBinding((b) => {
+      const cur = b.applicationDataPaths ?? [];
+      const next = cur.includes(path) ? cur.filter((p) => p !== path) : [...cur, path];
+      return { ...b, applicationDataPaths: next };
+    });
+  }
 
   async function handleSave() {
     await save.mutateAsync({
@@ -100,6 +122,41 @@ export function EvidenceBindingEditor({ level, templateId, onSaved }: Props) {
             maxLength={1000}
           />
         </Field>
+        {attrFields.length > 0 && (
+          <Field
+            label="Application-data attributes"
+            hint="Structured facts from the assessment's application-details JSON to feed this question's AI judgement. Only the ticked attributes are sent."
+          >
+            <Combobox
+              multiselect
+              placeholder="Pick attributes…"
+              selectedOptions={selectedPaths}
+              value=""
+              onOptionSelect={(_, d) => d.optionValue && togglePath(d.optionValue)}
+            >
+              {attrFields.map((f) => (
+                <Option key={f.path} value={f.path} text={f.path}>
+                  {f.label} — {f.path}
+                </Option>
+              ))}
+            </Combobox>
+            {selectedPaths.length > 0 && (
+              <div className={styles.chips}>
+                {selectedPaths.map((p) => (
+                  <Tag
+                    key={p}
+                    size="small"
+                    dismissible
+                    dismissIcon={{ 'aria-label': `Remove ${p}` }}
+                    onClick={() => togglePath(p)}
+                  >
+                    {p}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </Field>
+        )}
       </div>
       <div className={styles.actions}>
         {(level.dnx_document_type_reference ?? '').trim() !== '' && (

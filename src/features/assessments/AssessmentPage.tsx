@@ -36,6 +36,8 @@ import { RejectAssessmentDialog } from './RejectAssessmentDialog';
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName, lookupId } from '../../lib/dataverse';
 import { useCurrentUserRoles } from '../../lib/roles';
+import { ApplicationDetailsCard } from '../applicationDetails/ApplicationDetailsCard';
+import { useApplicationDetails } from '../applicationDetails/api';
 import { Tooltip } from '@fluentui/react-components';
 import { DocumentText20Regular } from '@fluentui/react-icons';
 import { LetterDialog } from '../letter/LetterDialog';
@@ -343,6 +345,13 @@ export function AssessmentPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const { data: assessment, isLoading, error } = useAssessmentInstance(assessmentId);
   const roles = useCurrentUserRoles();
+  // Application-details JSON for this instance — powers per-level detail panels
+  // and feeds AI bindings. Only fetched when the instance actually has a file.
+  const { data: applicationData } = useApplicationDetails(
+    assessmentId,
+    !!assessment?.dnx_application_details_name,
+    assessment?.dnx_application_details_name,
+  );
 
   // Autosave state — lifted here so the badge in the hero can see the upsert
   // mutation's status. ChecklistRenderer gets the mutation via prop.
@@ -413,6 +422,7 @@ export function AssessmentPage() {
       ai: {
         confidence: suggestion.confidence,
         sourceSummary: suggestion.rationale,
+        sourceAttributes: suggestion.usedAttributes,
       },
     });
   };
@@ -594,6 +604,12 @@ export function AssessmentPage() {
         </div>
       </div>
 
+      <ApplicationDetailsCard
+        instanceId={assessment.dnx_assessment_instanceid}
+        detailsName={assessment.dnx_application_details_name}
+        disabled={label === 'PendingReview' || label === 'Complete' || !roles.canAssess}
+      />
+
       <ReviewerFeedbackBanner assessment={assessment} statusLabel={label} />
 
       {label === 'PendingReview' && roles.canReview && (
@@ -660,6 +676,7 @@ export function AssessmentPage() {
         persistedMappingJson={assessment.dnx_evidence_mapping}
         onPersistMapping={(mapping) => saveMapping.mutate(mapping)}
         onAccept={handleAcceptSuggestion}
+        applicationData={applicationData}
       />
 
       {templateId ? (
@@ -671,6 +688,7 @@ export function AssessmentPage() {
           pendingReview={label === 'PendingReview'}
           submittedOn={assessment.dnx_submittedon}
           canAssess={roles.canAssess}
+          applicationData={applicationData}
         />
       ) : (
         <div className={styles.placeholder}>

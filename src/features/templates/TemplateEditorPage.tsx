@@ -24,6 +24,7 @@ import { LevelTree } from './levels/LevelTree';
 import { ScoringMatrix } from '../rules/ScoringMatrix';
 import { AiConditioningMatrix } from './levels/AiConditioningMatrix';
 import { LetterBuilder } from '../letter/LetterBuilder';
+import { DetailsBuilder } from '../applicationDetails/DetailsBuilder';
 
 const useStyles = makeStyles({
   backLink: {
@@ -194,7 +195,9 @@ export function TemplateEditorPage() {
   // Views over the same template — Structure (tree authoring), Scoring (rule
   // editing), AI conditioning (evidence bindings), and Letter (outcome-letter
   // designer). Tab state is local since it doesn't survive page reloads.
-  const [tab, setTab] = useState<'structure' | 'scoring' | 'ai' | 'letter'>('structure');
+  const [tab, setTab] = useState<'structure' | 'scoring' | 'ai' | 'letter' | 'details'>(
+    'structure',
+  );
 
   if (isLoading) return <Spinner label="Loading template..." />;
   if (error) {
@@ -363,6 +366,13 @@ export function TemplateEditorPage() {
         >
           Letter
         </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'details' ? styles.tabActive : ''}`}
+          onClick={() => setTab('details')}
+        >
+          Details
+        </button>
       </div>
 
       {tab === 'structure' ? (
@@ -371,8 +381,10 @@ export function TemplateEditorPage() {
         <ScoringMatrix templateId={template.dnx_assessment_templateid} />
       ) : tab === 'ai' ? (
         <AiConditioningMatrix templateId={template.dnx_assessment_templateid} />
-      ) : (
+      ) : tab === 'letter' ? (
         <LetterBuilder templateId={template.dnx_assessment_templateid} />
+      ) : (
+        <DetailsBuilder templateId={template.dnx_assessment_templateid} />
       )}
     </div>
   );

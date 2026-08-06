@@ -175,6 +175,24 @@ interface Props {
   criteria?: Criteria;
 }
 
+/**
+ * Format the stored `dnx_ai_source_attributes` (JSON array of application-data
+ * paths the AI judgement used) into a trailing tooltip sentence. Returns '' when
+ * none / unparseable so the tooltip stays clean for evidence-only answers.
+ */
+function aiSourceAttributes(stored: string | undefined): string {
+  if (!stored) return '';
+  try {
+    const arr = JSON.parse(stored);
+    if (Array.isArray(arr) && arr.length > 0) {
+      return ` Used application data: ${arr.join(', ')}.`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
 export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRow(
   { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId, criteria },
   ref,
@@ -258,7 +276,9 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
                 typeof response.dnx_confidence_score === 'number'
                   ? ` (${Math.round(response.dnx_confidence_score * 100)}% confidence)`
                   : ''
-              }.${response.dnx_ai_source_summary ? ` ${response.dnx_ai_source_summary}` : ''} Edit to override.`
+              }.${response.dnx_ai_source_summary ? ` ${response.dnx_ai_source_summary}` : ''}${
+                aiSourceAttributes(response.dnx_ai_source_attributes)
+              } Edit to override.`
             }
             relationship="description"
             withArrow

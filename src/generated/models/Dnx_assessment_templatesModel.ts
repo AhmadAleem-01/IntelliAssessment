@@ -17,6 +17,7 @@ export const Dnx_assessment_templatesstatuscode = {
 export type Dnx_assessment_templatesstatuscode = keyof typeof Dnx_assessment_templatesstatuscode;
 
 export interface Dnx_assessment_templatesBase {
+  dnx_application_schema?: string;
   dnx_assessment_templateid: string;
   dnx_description?: string;
   dnx_letter_template_json?: string;
