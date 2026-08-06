@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Spinner,
@@ -38,6 +38,7 @@ import { lookupName, lookupId } from '../../lib/dataverse';
 import { useCurrentUserRoles } from '../../lib/roles';
 import { ApplicationDetailsCard } from '../applicationDetails/ApplicationDetailsCard';
 import { useApplicationDetails } from '../applicationDetails/api';
+import { collectUsedPaths } from '../applicationDetails/usedPaths';
 import { Tooltip } from '@fluentui/react-components';
 import { DocumentText20Regular } from '@fluentui/react-icons';
 import { LetterDialog } from '../letter/LetterDialog';
@@ -375,6 +376,9 @@ export function AssessmentPage() {
     ? lookupId(assessment, 'dnx_assessmenttemplate')
     : undefined;
   const { data: levels } = useTemplateLevels(templateIdForOutcome);
+  // Application-details attribute paths the template actually uses (AI bindings
+  // + details panels) — the card validates the uploaded JSON against these.
+  const requiredAppDataPaths = useMemo(() => collectUsedPaths(levels), [levels]);
   const { data: responses } = useAssessmentResponses(assessmentId);
   const allLevelIds = (levels ?? []).map((l) => l.dnx_assessment_levelid);
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
@@ -608,6 +612,7 @@ export function AssessmentPage() {
         instanceId={assessment.dnx_assessment_instanceid}
         detailsName={assessment.dnx_application_details_name}
         disabled={label === 'PendingReview' || label === 'Complete' || !roles.canAssess}
+        requiredPaths={requiredAppDataPaths}
       />
 
       <ReviewerFeedbackBanner assessment={assessment} statusLabel={label} />

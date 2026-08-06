@@ -1,12 +1,18 @@
 import { useRef, useState } from 'react';
-import { Button, Spinner, makeStyles } from '@fluentui/react-components';
+import {
+  Button,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  makeStyles,
+} from '@fluentui/react-components';
 import {
   DocumentData20Regular,
   ArrowUpload16Regular,
   Checkmark16Filled,
 } from '@fluentui/react-icons';
 import { useSaveApplicationDetails, useApplicationDetails } from './api';
-import { formatValue } from './appData';
+import { formatValue, missingPaths } from './appData';
 
 const useStyles = makeStyles({
   card: {
@@ -59,6 +65,12 @@ interface Props {
   /** File name currently stored (drives the read refresh key). */
   detailsName?: string;
   disabled?: boolean;
+  /**
+   * Attribute paths the template actually uses (AI bindings + details panels).
+   * The card warns when the uploaded JSON is missing any of them, so bindings
+   * / panels don't silently blank out. See `collectUsedPaths`.
+   */
+  requiredPaths?: string[];
 }
 
 /**
@@ -67,7 +79,12 @@ interface Props {
  * shows a compact preview of its top-level fields. The bytes live in the
  * instance's `dnx_application_details` File column.
  */
-export function ApplicationDetailsCard({ instanceId, detailsName, disabled }: Props) {
+export function ApplicationDetailsCard({
+  instanceId,
+  detailsName,
+  disabled,
+  requiredPaths,
+}: Props) {
   const styles = useStyles();
   const save = useSaveApplicationDetails(instanceId);
   const [refresh, setRefresh] = useState(0);
@@ -80,6 +97,13 @@ export function ApplicationDetailsCard({ instanceId, detailsName, disabled }: Pr
     hasFile,
     `${detailsName ?? ''}#${refresh}`,
   );
+
+  // Which template-used attributes the currently-stored file is missing — these
+  // render as em-dashes in panels and are skipped by AI bindings.
+  const missing =
+    data && requiredPaths && requiredPaths.length > 0
+      ? missingPaths(data, requiredPaths)
+      : [];
 
   async function onPick(file: File | undefined) {
     setError(null);
@@ -172,6 +196,16 @@ export function ApplicationDetailsCard({ instanceId, detailsName, disabled }: Pr
                 </div>
               ))}
             </div>
+            {missing.length > 0 && (
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  This file is missing {missing.length} attribute
+                  {missing.length === 1 ? '' : 's'} the template uses — they'll show as “—”
+                  in detail panels and be skipped by AI bindings:{' '}
+                  <b>{missing.join(', ')}</b>.
+                </MessageBarBody>
+              </MessageBar>
+            )}
           </>
         ) : (
           <span className={styles.error}>

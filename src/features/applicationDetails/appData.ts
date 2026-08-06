@@ -135,6 +135,36 @@ export function resolvePath(root: unknown, path: AppDataPath): unknown {
   return cur;
 }
 
+/** True when a path iterates an array (contains an empty `[]` segment). */
+export function isRepeatingPath(path: AppDataPath): boolean {
+  return /\[\]/.test(path);
+}
+
+/**
+ * Length of the array a repeating (`[]`) path iterates — i.e. how many items a
+ * repeating details panel should render. Resolves the prefix up to (and
+ * including) the FIRST `[]` array, and returns its length. 0 for a
+ * non-repeating path, a missing prefix, or a non-array.
+ */
+export function arrayLengthForPath(root: unknown, path: AppDataPath): number {
+  const first = path.indexOf('[]');
+  if (first < 0) return 0;
+  // The array itself is at the prefix before `[]` (strip the trailing dot).
+  const prefix = path.slice(0, first).replace(/\.$/, '');
+  const arr = prefix ? resolvePath(root, prefix) : root;
+  return Array.isArray(arr) ? arr.length : 0;
+}
+
+/**
+ * Resolve a repeating path at a specific array index by substituting the FIRST
+ * empty `[]` with `[index]`. A non-repeating path ignores `index` and resolves
+ * as-is (so mixed scalar/repeating fields both work through one call).
+ */
+export function resolvePathAt(root: unknown, path: AppDataPath, index: number): unknown {
+  const concrete = path.replace('[]', `[${index}]`);
+  return resolvePath(root, concrete);
+}
+
 /** Resolve several paths into a `{ path: displayString }` map, skipping misses. */
 export function resolvePaths(
   root: unknown,
@@ -144,6 +174,23 @@ export function resolvePaths(
   for (const p of paths) {
     const v = resolvePath(root, p);
     if (v !== undefined) out[p] = formatValue(v);
+  }
+  return out;
+}
+
+/**
+ * Of the given paths, which do NOT resolve to a value in `root` (i.e. would
+ * render as an em-dash / be skipped by the AI). Used to warn an assessor that
+ * their uploaded application-details file is missing attributes the template
+ * actually relies on. De-duplicated, original order preserved.
+ */
+export function missingPaths(root: unknown, paths: AppDataPath[]): AppDataPath[] {
+  const seen = new Set<AppDataPath>();
+  const out: AppDataPath[] = [];
+  for (const p of paths) {
+    if (seen.has(p)) continue;
+    seen.add(p);
+    if (resolvePath(root, p) === undefined) out.push(p);
   }
   return out;
 }

@@ -495,7 +495,11 @@ An assessment can carry a structured **application-details JSON** (facts about t
 
 **Back-compat**: every column is optional — a template/assessment with none behaves exactly as before (no Details tab content, no card file, no prompt injection, no badge attrs). The evidence-binding parser tolerates the new key alongside the legacy shapes (gotcha V).
 
-**Not yet done** (raised in the plan, deferred): validating an uploaded instance JSON against the template's sample shape; repeating-array details (one panel per `quals[i]`); a seed/demo. Provenance (`dnx_ai_source_attributes`) is written on accept but, like the other `dnx_ai_*` columns, is **not** in the audit snapshot (gotcha at `snapshotResponseToColumns`).
+**Upload validation**: the card warns when the uploaded JSON is missing attributes the template actually **uses** — `collectUsedPaths(levels)` (`usedPaths.ts`) gathers every path bound to an AI question (`applicationDataPaths`) or shown in a details panel (`dnx_details_layout`); `missingPaths(data, paths)` (`appData.ts`) reports which of those don't resolve. `AssessmentPage` passes the used paths as `requiredPaths`; the card shows a warning MessageBar listing the missing ones (they'd otherwise render as “—” / be skipped by AI). Invalid-JSON / oversize still *block* upload; a merely-incomplete file is allowed but warned.
+
+**Repeating-array panels**: a details panel splits its fields into scalar (shown once, two-col grid) and repeating (`[]` path) — repeating fields render **one block per array item** (`#1`, `#2`, …), so a list attribute shows every element. `DetailsPanel` uses `isRepeatingPath` / `arrayLengthForPath` (longest array across the panel's repeating fields = item count) / `resolvePathAt(root, path, i)` (substitutes the first `[]` with `[i]`), all in `appData.ts`. A panel can mix both.
+
+**Not yet done** (raised in the plan, deferred): deeper schema-shape validation beyond used-path presence; nested/multi-array panels (one `[]` level only). Provenance (`dnx_ai_source_attributes`) is written on accept but, like the other `dnx_ai_*` columns, is **not** in the audit snapshot (gotcha at `snapshotResponseToColumns`). A **"Seed application-details demo"** seeder exists (`seedApplicationDetailsDemo.ts`) with a sample + instance JSON; `demo-guide.md` §12 walks the feature.
 
 ## Dataverse entity reference (publisher prefix `dnx_`)
 

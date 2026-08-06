@@ -15,6 +15,8 @@ For the AI auto-fill demo, also click **Seed AI demo** on the same page — it c
 
 For the letter-builder demo, click **Seed letter demo** — a project + template with a "Qualifications" section holding 5 subsections (each with its own Reason question), on an assessment that's already answered with a varied mix of reasons. See [§11](#11-letter-builder--grouped-subsections-2-3-min) below.
 
+For the application-details demo, click **Seed application-details demo** — a project + template with a sample JSON schema, detail panels on a section + subsection, and AI bindings that reference JSON attributes; plus an assessment with its matching JSON file already uploaded. See [§12](#12-application-details-json-2-3-min) below.
+
 If you re-run a seed, you'll get a second copy of everything. Clean up in the Power Apps maker portal if it gets cluttered.
 
 ---
@@ -181,6 +183,35 @@ Talking point: *"The whole layout is author-controlled and reusable across every
 
 ---
 
+### 12. Application details (JSON) (2–3 min)
+
+Uses the **separate** application-details dataset — click **Seed application-details demo** in setup. It builds a template whose questions read a structured **application-details JSON** (fixed shape per template) three ways: a detail panel per section, AI bindings that reference JSON attributes, and an upload-validation warning. The seeded assessment already has its matching JSON file uploaded, so everything resolves immediately.
+
+**See the detail panels + repeating array (the main act):**
+
+1. Open **Application Details Demo — Priya Raman**. Between the Overview card and the checklist is the **Application details** card — showing the uploaded file's top-level fields with a green tick.
+2. Scroll into the checklist. The **Applicant** section shows a details panel (full name, DOB, nationality, city) resolved from the JSON; **Experience** shows years + prior-assessment.
+3. Open the **Qualifications** subsection — its panel renders **one block per qualification** (`#1 BSc Computer Science · University of Pune · 2013`, `#2 MSc Data Science · UNSW · 2019`), because the author bound a repeating `qualifications[].*` path.
+
+Talking point: *"The template author dragged JSON attributes onto each section; the assessor just uploads the applicant's JSON file and the panels fill in. A repeating array shows every item, not just the first."*
+
+**AI judgement grounded in the JSON:**
+
+1. In the Evidence files card header, click **AI auto-fill**.
+2. In the Map step, note the **"Judged from application data"** group — questions with no evidence file that will be answered from the JSON alone (e.g. *Applicant is based in Australia?*, *Nationality*, *Meets the 5-year experience bar?*). Tick them, **Run**.
+3. In Review, the proposals draft straight from the JSON (Australia → *true*, Nationality → *Indian*, 5-year bar → *true*). Accept. On the checklist each shows the **AI · N%** badge — hover it: the tooltip lists *"Used application data: address.country"* etc.
+
+Talking point: *"A question can be judged from an evidence document, from application-data attributes, or both. The AI records exactly which attributes it relied on — that's the provenance you see in the badge."*
+
+**Upload validation (the safety net):**
+
+1. Back on the Application details card, click **Replace JSON** and upload a file missing some used attributes, e.g. `{ "applicant": { "fullName": "Test" }, "yearsExperience": 3 }`.
+2. A yellow warning lists the missing attributes (*applicant.dateOfBirth, address.country, qualifications[].title, …*) — *"these show as — in panels and are skipped by AI."* Re-upload the full file (in the seed result's copy box) to clear it.
+
+**Show the authoring side:** open the template → **Details** tab (the sample JSON + the drag-drop panels per level) and **AI conditioning** tab (each question's bound attributes as chips).
+
+---
+
 ## Feature checklist
 
 Use this if you only have time for one screen each:
@@ -203,6 +234,10 @@ Use this if you only have time for one screen each:
 - [ ] Grouped subsections block — section + group-by-question pickers
 - [ ] View letter — qualifications grouped by shared reason
 - [ ] Rich text — `/` slash menu, answer chip insert, colour a chip
+- [ ] Details tab — sample JSON + drag-drop attribute panels per section/subsection
+- [ ] Application details card — upload JSON, top-level preview, missing-attribute warning
+- [ ] Detail panels on the assessment — scalar fields + repeating array (one block per item)
+- [ ] AI auto-fill from JSON — "Judged from application data" group + used-attribute provenance in the badge
 
 ---
 
@@ -223,3 +258,5 @@ Or re-seed twice and only delete the *original* demo project + cascade — Datav
 The **AI demo** ("RPL — AI Auto-fill (Demo)") cleans up the same way: delete its responses → its levels' criteria → the levels → template → project. Also remove the evidence files you uploaded from the assessment's SharePoint folder.
 
 The **letter demo** ("RPL — Letter Grouping (Demo)") has no criteria to remove (no rule cascade was seeded) — just delete its responses → levels → template → project, same order as above.
+
+The **application-details demo** ("RPL — Application Details (Demo)") also has no criteria — delete its responses → levels → template → project. The uploaded JSON lives in the instance's `dnx_application_details` File column and is removed with the instance.
