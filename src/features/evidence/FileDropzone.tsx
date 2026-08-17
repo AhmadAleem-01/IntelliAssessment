@@ -19,23 +19,23 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     gap: '8px',
     padding: '24px 20px',
-    border: '1px dashed var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-secondary)',
-    color: 'var(--color-text-secondary)',
+    border: '1px dashed var(--ds-border)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-surface-base)',
+    color: 'var(--ds-text-body)',
     fontSize: '13px',
     cursor: 'pointer',
     transition: 'border-color 0.1s ease, background-color 0.1s ease',
     textAlign: 'center',
     ':hover': {
-      border: '1px dashed var(--color-purple)',
-      color: 'var(--color-text-primary)',
+      border: '1px dashed var(--ds-ai-primary, #8B5CF6)',
+      color: 'var(--ds-text-strong)',
     },
   },
   dropzoneActive: {
-    border: '1px dashed var(--color-purple)',
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
+    border: '1px dashed var(--ds-ai-primary, #8B5CF6)',
+    backgroundColor: 'var(--ds-ai-surface, #F5F3FF)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
   },
   dropzoneBusy: {
     cursor: 'wait',
@@ -43,7 +43,7 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '11px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
   },
   hiddenInput: {
     display: 'none',
@@ -53,7 +53,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '8px',
     fontSize: '12px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
   },
 });
 

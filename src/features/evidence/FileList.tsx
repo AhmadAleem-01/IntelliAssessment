@@ -28,26 +28,23 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
   },
-  empty: {
-    fontSize: '12px',
-    color: 'var(--color-text-tertiary)',
-    fontStyle: 'italic',
-    padding: '8px 0',
-  },
+  // Column layout: the file identity on top, the action row beneath — so the
+  // filename never gets squeezed out in a narrow container (e.g. the sidebar).
   row: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '10px 12px',
-    border: '0.5px solid var(--color-border-tertiary)',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '12px',
+    border: '1px solid var(--ds-border)',
     borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
+    backgroundColor: 'var(--ds-surface-card)',
   },
   rowBusy: { opacity: 0.6 },
+  rowTop: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 },
   iconWrap: {
     display: 'inline-flex',
     flexShrink: 0,
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-muted)',
   },
   rowBody: {
     flex: 1,
@@ -57,29 +54,38 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   rowName: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowPath: {
     fontSize: '11px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowActions: {
     display: 'flex',
-    gap: '2px',
+    gap: '4px',
     flexShrink: 0,
+    paddingTop: '2px',
+    borderTop: '1px solid var(--ds-border)',
   },
   miniBtn: {
     minWidth: 0,
-    padding: '2px 8px',
+    padding: '4px 8px',
     fontSize: '11px',
+    color: 'var(--ds-text-body)',
+  },
+  empty: {
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    fontStyle: 'italic',
+    padding: '8px 0',
   },
 });
 
@@ -219,18 +225,20 @@ export function FileList({ assessmentName }: Props) {
               key={f.filePath || f.fileName}
               className={`${styles.row} ${removing ? styles.rowBusy : ''}`}
             >
-              <span className={styles.iconWrap} aria-hidden>
-                {inferIcon(f.fileName)}
-              </span>
-              <div className={styles.rowBody}>
-                <span className={styles.rowName} title={f.fileName}>
-                  {f.fileName}
+              <div className={styles.rowTop}>
+                <span className={styles.iconWrap} aria-hidden>
+                  {inferIcon(f.fileName)}
                 </span>
-                {f.filePath && (
-                  <span className={styles.rowPath} title={f.filePath}>
-                    {f.filePath}
+                <div className={styles.rowBody}>
+                  <span className={styles.rowName} title={f.fileName}>
+                    {f.fileName}
                   </span>
-                )}
+                  {f.filePath && (
+                    <span className={styles.rowPath} title={f.filePath}>
+                      {f.filePath}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className={styles.rowActions}>
                 <Button

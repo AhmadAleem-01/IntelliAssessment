@@ -74,6 +74,55 @@ export function nextOrder(siblings: LevelNode[]): number {
 }
 
 /**
+ * The 0-based position of a question's enclosing **subsection** among its
+ * same-typed siblings — e.g. the 3rd "Qualification N" subsection returns 2.
+ *
+ * Used by the AI-conditioning "use this subsection's position" binding: a
+ * repeating attribute path (`qualifications[]`) is resolved at this index so
+ * the question reads its own array item rather than always the first.
+ *
+ * Resolution is by **structure order** (sibling position), not by parsing the
+ * name — robust if a subsection is renamed. Returns 0 when the question isn't
+ * under a subsection (no repeating context), so callers fall back to item 0.
+ */
+export function subsectionIndexOf(
+  levels: Dnx_assessment_levels[] | undefined,
+  questionLevelId: string,
+): number {
+  if (!levels) return 0;
+  const byId = new Map(levels.map((l) => [l.dnx_assessment_levelid, l] as const));
+  // Walk up to the nearest Subsection (type 2) ancestor.
+  let cur = byId.get(questionLevelId);
+  let subsection: Dnx_assessment_levels | undefined;
+  for (let i = 0; i < 8 && cur; i++) {
+    if (cur.dnx_assessment_level_type === 2) {
+      subsection = cur;
+      break;
+    }
+    const pid = lookupId(cur, 'dnx_parent_assessment_level');
+    cur = pid ? byId.get(pid) : undefined;
+  }
+  if (!subsection) return 0;
+  // Position among Subsection siblings sharing the same parent, ordered.
+  const parentId = lookupId(subsection, 'dnx_parent_assessment_level') ?? null;
+  const siblings = levels
+    .filter(
+      (l) =>
+        l.dnx_assessment_level_type === 2 &&
+        (lookupId(l, 'dnx_parent_assessment_level') ?? null) === parentId,
+    )
+    .sort(
+      (a, b) =>
+        (a.dnx_assessment_level_order ?? 0) - (b.dnx_assessment_level_order ?? 0) ||
+        (a.createdon ?? '').localeCompare(b.createdon ?? ''),
+    );
+  const idx = siblings.findIndex(
+    (l) => l.dnx_assessment_levelid === subsection!.dnx_assessment_levelid,
+  );
+  return idx < 0 ? 0 : idx;
+}
+
+/**
  * Locate the sibling bucket (parent's children) that contains a given level id,
  * along with that level's index within the bucket. Returns `undefined` if not
  * found anywhere in the tree. The bucket is returned by reference so callers

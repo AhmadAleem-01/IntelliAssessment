@@ -14,49 +14,118 @@ import {
 import { useSaveApplicationDetails, useApplicationDetails } from './api';
 import { formatValue, missingPaths } from './appData';
 
+/** "dateOfBirth" / "yearsExperience" → "Date of birth" / "Years experience". */
+function humanize(key: string): string {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Flatten a parsed application-details object one level into readable
+ * label/value rows. Scalars pass through; a nested object contributes its own
+ * scalar leaves (labelled by child key); arrays collapse to an "N items" count.
+ * Deliberately shallow — the preview is a summary, not a JSON dump.
+ */
+function flattenForPreview(root: Record<string, unknown>): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  for (const [k, v] of Object.entries(root)) {
+    if (v === null || v === undefined) continue;
+    if (Array.isArray(v)) {
+      rows.push({ label: humanize(k), value: `${v.length} item${v.length === 1 ? '' : 's'}` });
+    } else if (typeof v === 'object') {
+      for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+        if (cv === null || cv === undefined || typeof cv === 'object') continue;
+        rows.push({ label: humanize(ck), value: formatValue(cv) });
+      }
+    } else {
+      rows.push({ label: humanize(k), value: formatValue(v) });
+    }
+  }
+  return rows;
+}
+
 const useStyles = makeStyles({
   card: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
-    overflow: 'hidden',
-    marginBottom: '16px',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
+    padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
   },
   header: {
-    padding: '14px 18px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-h2)',
+    fontWeight: 600,
+    color: 'var(--ds-text-heading)',
   },
-  headerTitle: {
+  headerTitle: { display: 'inline-flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 },
+  fileRow: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    flex: 1,
-    minWidth: 0,
+    gap: '7px',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-body)',
   },
-  body: { padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px' },
-  empty: { fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' },
-  row: { display: 'flex', flexDirection: 'column', gap: '1px', padding: '3px 0' },
-  key: {
-    fontSize: '10px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--color-text-tertiary)',
+  empty: { fontSize: 'var(--ds-fs-body)', color: 'var(--ds-text-muted)', lineHeight: 1.5 },
+  grid: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px' },
+  row: {
+    display: 'grid',
+    gridTemplateColumns: '96px 1fr',
+    gap: '12px',
+    alignItems: 'baseline',
   },
+  key: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)' },
   val: {
-    fontSize: '12px',
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 500,
+    color: 'var(--ds-text-strong)',
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  error: { fontSize: '12px', color: 'var(--color-red-text)' },
+  divider: { height: '1px', backgroundColor: 'var(--ds-border)' },
+  footRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    fontSize: '11px',
+    color: 'var(--ds-text-muted)',
+  },
+  rawToggle: {
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    fontSize: 'var(--ds-fs-caption)',
+    fontWeight: 600,
+    color: 'var(--ds-ai-primary)',
+    ':hover': { textDecoration: 'underline' },
+  },
+  rawJson: {
+    margin: 0,
+    padding: '12px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--ds-surface-base)',
+    border: '1px solid var(--ds-border)',
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontSize: '11px',
+    lineHeight: 1.5,
+    color: 'var(--ds-text-body)',
+    maxHeight: '220px',
+    overflow: 'auto',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
+  error: { fontSize: 'var(--ds-fs-caption)', color: '#b91c1c' },
   hiddenFile: { display: 'none' },
 });
 
@@ -89,6 +158,7 @@ export function ApplicationDetailsCard({
   const save = useSaveApplicationDetails(instanceId);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const hasFile = !!detailsName;
@@ -133,12 +203,11 @@ export function ApplicationDetailsCard({
     }
   }
 
-  // Top-level scalar fields for a compact preview (objects/arrays summarised).
-  const previewRows = data
-    ? Object.entries(data)
-        .slice(0, 8)
-        .map(([k, v]) => [k, formatValue(v)] as const)
-    : [];
+  // Flatten the JSON one level into readable label/value rows for the preview.
+  // Nested objects expand into their scalar leaves (so "applicant: {...}" shows
+  // as Full name / Date of birth / …); arrays collapse to a count; scalars show
+  // as-is. Never dumps raw JSON, which is what made the old preview unreadable.
+  const previewRows = data ? flattenForPreview(data).slice(0, 10) : [];
 
   return (
     <div className={styles.card}>
@@ -182,20 +251,32 @@ export function ApplicationDetailsCard({
           <Spinner size="tiny" label="Loading details…" />
         ) : data ? (
           <>
-            <span className={styles.empty}>
-              <Checkmark16Filled style={{ verticalAlign: 'middle', color: 'var(--color-green)' }} />{' '}
+            <span className={styles.fileRow}>
+              <Checkmark16Filled style={{ color: 'var(--ds-suitable)' }} />
               {detailsName}
             </span>
             <div className={styles.grid}>
-              {previewRows.map(([k, v]) => (
-                <div key={k} className={styles.row}>
-                  <span className={styles.key}>{k}</span>
-                  <span className={styles.val} title={v}>
-                    {v}
+              {previewRows.map((r, i) => (
+                <div key={`${r.label}-${i}`} className={styles.row}>
+                  <span className={styles.key}>{r.label}</span>
+                  <span className={styles.val} title={r.value}>
+                    {r.value}
                   </span>
                 </div>
               ))}
             </div>
+            <div className={styles.divider} />
+            <div className={styles.footRow}>
+              <span>{detailsName}</span>
+              <button
+                type="button"
+                className={styles.rawToggle}
+                onClick={() => setShowRaw((v) => !v)}
+              >
+                {showRaw ? 'Hide raw JSON' : 'Raw JSON'}
+              </button>
+            </div>
+            {showRaw && <pre className={styles.rawJson}>{JSON.stringify(data, null, 2)}</pre>}
             {missing.length > 0 && (
               <MessageBar intent="warning">
                 <MessageBarBody>

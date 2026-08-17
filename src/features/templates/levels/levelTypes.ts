@@ -58,18 +58,18 @@ export const LEVEL_TYPE_PALETTE: Record<
   { bg: string; color: string; border: string }
 > = {
   1: {
-    bg: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
-    border: 'var(--color-purple)',
+    bg: 'var(--ds-brand-primary)',
+    color: '#fff',
+    border: 'var(--ds-brand-primary)',
   },
   2: {
-    bg: 'var(--color-blue-soft)',
-    color: 'var(--color-blue-text)',
-    border: 'var(--color-blue)',
+    bg: 'var(--ds-ai-surface, #F5F3FF)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
+    border: 'var(--ds-ai-border, #ddd6fe)',
   },
   3: {
-    bg: 'var(--color-teal-soft)',
-    color: 'var(--color-teal-text)',
-    border: 'var(--color-teal)',
+    bg: 'var(--ds-surface-base)',
+    color: 'var(--ds-text-muted)',
+    border: 'var(--ds-border)',
   },
 };

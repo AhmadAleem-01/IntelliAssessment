@@ -20,20 +20,20 @@ const useStyles = makeStyles({
   },
   empty: {
     fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     padding: '8px 10px',
-    border: '0.5px dashed var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
+    border: '0.5px dashed var(--ds-border)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-surface-card)',
   },
   group: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
     padding: '10px 12px',
-    border: '0.5px solid var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-surface-card)',
   },
   groupHeader: {
     display: 'grid',
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
   groupHeaderLabel: {
     fontSize: '10px',
     fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     marginBottom: '4px',
@@ -59,7 +59,7 @@ const useStyles = makeStyles({
   membersLabel: {
     fontSize: '10px',
     fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
   },
@@ -79,7 +79,7 @@ const useStyles = makeStyles({
   },
   memberPath: {
     fontSize: '10px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     fontStyle: 'italic',
   },
   addBtn: {
@@ -91,7 +91,7 @@ const useStyles = makeStyles({
   },
   validationHint: {
     fontSize: '10px',
-    color: 'var(--color-amber-text)',
+    color: '#b45309',
   },
 });
 

@@ -51,17 +51,17 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     lineHeight: 1.4,
   },
   card: {
-    border: '0.5px solid var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-md)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: '8px',
     padding: '12px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    backgroundColor: 'var(--color-background-secondary)',
+    backgroundColor: 'var(--ds-surface-base)',
   },
   twoCol: {
     display: 'grid',
@@ -81,7 +81,7 @@ const useStyles = makeStyles({
   },
   savedFlag: {
     fontSize: '11px',
-    color: 'var(--color-green-text)',
+    color: '#047857',
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',

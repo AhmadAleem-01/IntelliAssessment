@@ -32,7 +32,7 @@ import { lookupId } from '../../lib/dataverse';
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
+    borderRadius: 'var(--ds-radius-card)',
     maxWidth: '560px',
     width: '94vw',
   },
@@ -42,15 +42,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     paddingBottom: '14px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    borderBottom: '0.5px solid var(--ds-border)',
     marginBottom: '18px',
   },
   headerMark: {
     width: '32px',
     height: '32px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
+    color: '#b45309',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -60,9 +60,9 @@ const useStyles = makeStyles({
   headerTitle: {
     fontSize: '14px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
-  headerSub: { fontSize: '12px', color: 'var(--color-text-secondary)' },
+  headerSub: { fontSize: '12px', color: 'var(--ds-text-body)' },
   fields: { display: 'flex', flexDirection: 'column', gap: '16px' },
   flagsSection: {
     display: 'flex',
@@ -75,13 +75,13 @@ const useStyles = makeStyles({
     gap: '6px',
     fontSize: '11px',
     fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
   },
   flagsSub: {
     fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
   },
   flagPicker: {
     display: 'flex',
@@ -98,9 +98,9 @@ const useStyles = makeStyles({
   },
   flagCard: {
     padding: '10px 12px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-amber-soft)',
-    border: '0.5px solid var(--color-amber)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
+    border: '0.5px solid var(--ds-pending, #F59E0B)',
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
@@ -114,14 +114,14 @@ const useStyles = makeStyles({
   flagPath: {
     fontSize: '10px',
     fontWeight: 600,
-    color: 'var(--color-amber-text)',
+    color: '#b45309',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
   },
   flagLabel: {
     fontSize: '13px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
     marginTop: '1px',
   },
   removeBtn: {
@@ -130,7 +130,7 @@ const useStyles = makeStyles({
     borderRadius: '50%',
     backgroundColor: 'transparent',
     border: 'none',
-    color: 'var(--color-amber-text)',
+    color: '#b45309',
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
@@ -142,12 +142,12 @@ const useStyles = makeStyles({
     },
   },
   rejectBtn: {
-    backgroundColor: 'var(--color-amber) !important',
+    backgroundColor: 'var(--ds-pending, #F59E0B) !important',
     color: '#fff !important',
-    border: '0.5px solid var(--color-amber) !important',
+    border: '0.5px solid var(--ds-pending, #F59E0B) !important',
     ':hover': {
-      backgroundColor: 'var(--color-amber-text) !important',
-      border: '0.5px solid var(--color-amber-text) !important',
+      backgroundColor: '#b45309 !important',
+      border: '0.5px solid #b45309 !important',
     },
   },
 });

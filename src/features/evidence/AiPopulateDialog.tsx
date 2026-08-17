@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogSurface,
@@ -19,6 +19,8 @@ import {
   CheckmarkCircle16Filled,
   ArrowClockwise16Regular,
   Document16Regular,
+  Checkmark16Filled,
+  Database16Regular,
 } from '@fluentui/react-icons';
 import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessment_levelsModel';
 import { parseEvidenceMapping } from '../assessments/api';
@@ -34,65 +36,150 @@ import {
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
-    maxWidth: '760px',
+    borderRadius: 'var(--ds-radius-card)',
+    maxWidth: '860px',
     width: '94vw',
     maxHeight: '90vh',
+    // The animated AI glow ring (.ai-glow-border) draws the edge; drop Fluent's
+    // own border so there's no double outline around the dialog.
+    border: '1px solid transparent',
   },
   title: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '15px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-h2)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
   },
   sub: {
-    fontSize: '12px',
-    color: 'var(--color-text-secondary)',
-    marginTop: '3px',
-    marginBottom: '14px',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    marginTop: '4px',
+    marginBottom: '16px',
     lineHeight: 1.5,
   },
-  // --- mapping phase ---
-  mapList: {
+  // --- mapping phase: two-panel master/detail ---
+  twoPanel: {
+    display: 'grid',
+    gridTemplateColumns: '300px 1fr',
+    gap: '20px',
+    maxHeight: '56vh',
+    '@media (max-width: 640px)': { gridTemplateColumns: '1fr' },
+  },
+  panel: { display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 },
+  panelHead: {
+    fontSize: '11px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--ds-text-muted)',
+  },
+  panelScroll: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
-    maxHeight: '56vh',
+    gap: '8px',
     overflow: 'auto',
     paddingRight: '4px',
   },
-  // A variable group: the file-mapping header row + its question checklist.
-  // No `overflow: hidden` here — it clips the question checklist. The inner
-  // `qPickList` carries its own rounded bottom corners instead.
-  mapGroup: {
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
-  },
-  mapRow: {
+  // Left panel: a selectable source row (file variable or the app-data group).
+  sourceRow: {
+    position: 'relative',
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     padding: '12px 14px',
+    borderRadius: '8px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%',
+    transition: 'border-color 0.1s ease, background-color 0.1s ease',
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+  },
+  // Active source: the animated AI glow ring (.ai-glow-border, added on the
+  // element in JSX) draws the edge, so this just sets the soft-violet fill and
+  // clears the resting border to avoid doubling the ring.
+  sourceRowActive: {
+    borderColor: 'transparent',
+    backgroundColor: 'var(--ds-ai-surface)',
+  },
+  sourceIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    fontSize: '18px',
+    '& svg': { width: '18px', height: '18px' },
+  },
+  sourceIconActive: {
+    backgroundColor: 'var(--ds-ai-primary)',
+    color: '#fff',
+  },
+  sourceInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
+  sourceName: {
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  sourceMeta: {
+    fontSize: '11px',
+    color: 'var(--ds-text-muted)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  sourceMetaMapped: { color: '#047857' },
+  sourceCheck: { color: 'var(--ds-suitable)', flexShrink: 0, display: 'flex' },
+  // Right panel: the selected source's file picker + its question checklist.
+  detailHead: {
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-heading)',
+    marginBottom: '4px',
+  },
+  // Each source's question group on the right. The active group gets a soft
+  // violet tint so it visually pairs with the highlighted left-panel row.
+  qGroup: {
+    padding: '12px 14px',
+    borderRadius: '8px',
+    border: '1px solid transparent',
+    transition: 'background-color 0.15s ease, border-color 0.15s ease',
+  },
+  qGroupActive: {
+    backgroundColor: 'var(--ds-ai-surface)',
+    borderColor: 'var(--ds-ai-border)',
   },
   qPickList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
-    padding: '4px 14px 12px 14px',
-    borderTop: '0.5px solid var(--color-border-tertiary)',
-    backgroundColor: 'var(--color-background-secondary)',
-    borderBottomLeftRadius: 'var(--border-radius-md)',
-    borderBottomRightRadius: 'var(--border-radius-md)',
   },
-  qPick: { fontSize: '13px' },
+  // Force the Fluent Checkbox label to use the app font — Fluent pulls its own
+  // family/size from the theme, which mismatched the Inter used elsewhere.
+  qPick: {
+    fontSize: 'var(--ds-fs-body)',
+    '& label': {
+      fontFamily: 'var(--font-sans)',
+      fontSize: 'var(--ds-fs-body)',
+      color: 'var(--ds-text-body)',
+    },
+  },
   qPickLabel: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '13px',
+    fontFamily: 'var(--font-sans)',
+    fontSize: 'var(--ds-fs-body)',
   },
   qPickAnswered: {
     fontSize: '10px',
@@ -100,21 +187,26 @@ const useStyles = makeStyles({
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '1px 6px',
-    borderRadius: 'var(--border-radius-pill)',
-    backgroundColor: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
+    borderRadius: 'var(--ds-radius-pill)',
+    backgroundColor: 'var(--ds-pending-soft)',
+    color: '#b45309',
   },
-  mapInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
   mapVar: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    fontSize: '13px',
+    fontSize: 'var(--ds-fs-body)',
     fontWeight: 600,
-    color: 'var(--color-purple-text)',
+    color: 'var(--ds-ai-primary)',
   },
-  mapCount: { fontSize: '11px', color: 'var(--color-text-secondary)' },
-  mapDropdown: { minWidth: '220px', flexShrink: 0 },
+  mapDropdown: { width: '100%', marginBottom: '14px' },
+  detailEmpty: {
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    fontStyle: 'italic',
+    padding: '20px 0',
+    textAlign: 'center',
+  },
   // --- review phase ---
   list: {
     display: 'flex',
@@ -125,21 +217,21 @@ const useStyles = makeStyles({
     paddingRight: '4px',
   },
   card: {
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-md)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: '8px',
     padding: '12px 14px',
-    backgroundColor: 'var(--color-background-primary)',
+    backgroundColor: 'var(--ds-surface-card)',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
   cardAccepted: {
-    backgroundColor: 'var(--color-green-soft)',
-    border: '0.5px solid var(--color-green)',
+    backgroundColor: 'var(--ds-suitable-soft)',
+    border: '1px solid var(--ds-suitable)',
   },
   cardTop: { display: 'flex', alignItems: 'flex-start', gap: '10px' },
   qBlock: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
-  qLabel: { fontSize: '13px', fontWeight: 500, color: 'var(--color-text-primary)' },
+  qLabel: { fontSize: '13px', fontWeight: 500, color: 'var(--ds-text-strong)' },
   overwriteTag: {
     marginLeft: '8px',
     fontSize: '10px',
@@ -147,20 +239,20 @@ const useStyles = makeStyles({
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '1px 6px',
-    borderRadius: 'var(--border-radius-pill)',
-    backgroundColor: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
+    borderRadius: 'var(--ds-radius-pill)',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
+    color: '#b45309',
     whiteSpace: 'nowrap',
   },
   qValue: {
     fontSize: '13px',
-    color: 'var(--color-purple-text)',
+    color: 'var(--ds-ai-primary)',
     fontWeight: 500,
     wordBreak: 'break-word',
   },
   rationale: {
     fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     lineHeight: 1.45,
     fontStyle: 'italic',
   },
@@ -169,12 +261,12 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 600,
     padding: '2px 8px',
-    borderRadius: 'var(--border-radius-pill)',
+    borderRadius: 'var(--ds-radius-pill)',
     whiteSpace: 'nowrap',
   },
-  confHigh: { backgroundColor: 'var(--color-green-soft)', color: 'var(--color-green-text)' },
-  confMed: { backgroundColor: 'var(--color-amber-soft)', color: 'var(--color-amber-text)' },
-  confLow: { backgroundColor: 'var(--color-red-soft)', color: 'var(--color-red-text)' },
+  confHigh: { backgroundColor: 'var(--ds-suitable-soft)', color: '#047857' },
+  confMed: { backgroundColor: 'var(--ds-pending-soft, #FEF3C7)', color: '#b45309' },
+  confLow: { backgroundColor: 'var(--ds-not-suitable-soft)', color: '#b91c1c' },
   cardActions: { display: 'flex', justifyContent: 'flex-end' },
   acceptedTag: {
     display: 'inline-flex',
@@ -182,7 +274,7 @@ const useStyles = makeStyles({
     gap: '5px',
     fontSize: '11px',
     fontWeight: 600,
-    color: 'var(--color-green-text)',
+    color: '#047857',
   },
   loadingPad: {
     padding: '52px 20px',
@@ -193,7 +285,7 @@ const useStyles = makeStyles({
   },
   loadingSub: {
     fontSize: '12px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textAlign: 'center',
     maxWidth: '380px',
     lineHeight: 1.5,
@@ -202,7 +294,7 @@ const useStyles = makeStyles({
     padding: '40px 20px',
     textAlign: 'center',
     fontSize: '13px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     lineHeight: 1.5,
   },
   // Footer laid out as a column: the button row on top, a status line beneath
@@ -222,7 +314,7 @@ const useStyles = makeStyles({
   },
   footerStatus: {
     fontSize: '11px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textAlign: 'right',
   },
   // Keep every footer button on one line + same height — Fluent will otherwise
@@ -464,11 +556,11 @@ export function AiPopulateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(_, d) => onOpenChange(d.open)}>
-      <DialogSurface className={styles.surface}>
+      <DialogSurface className={`${styles.surface} ai-glow-border`}>
         <DialogBody>
           <DialogContent>
             <div className={styles.title}>
-              <Sparkle16Filled style={{ color: 'var(--color-purple)' }} />
+              <Sparkle16Filled style={{ color: 'var(--ds-ai-primary)' }} />
               AI auto-fill
             </div>
 
@@ -678,6 +770,43 @@ function MapPhase({
   answeredLevelIds: Set<string>;
   onToggleQuestion: (levelId: string) => void;
 }) {
+  // Unify file-variable groups + the app-data group into one "source" list so
+  // the two-panel layout can render them the same way. `fileVar` is null for the
+  // application-data source (it has no upload to map). Computed before any early
+  // return so the hook below always runs in the same order (rules-of-hooks).
+  type Source = {
+    id: string;
+    name: string;
+    fileVar: string | null;
+    questions: AiQuestion[];
+  };
+  const sources: Source[] = [
+    ...groups.map((g) => ({
+      id: `file:${g.fileVariable}`,
+      name: g.fileVariable,
+      fileVar: g.fileVariable,
+      questions: g.questions,
+    })),
+    ...(appOnlyQuestions.length > 0
+      ? [
+          {
+            id: 'appdata',
+            name: 'Application data',
+            fileVar: null,
+            questions: appOnlyQuestions,
+          },
+        ]
+      : []),
+  ];
+
+  const [activeId, setActiveId] = useState('');
+  // Keep a valid selection: fall back to the first source when the stored id
+  // isn't present (initial render, or the list changed) so one group always
+  // reads as active.
+  const active = sources.find((s) => s.id === activeId) ?? sources[0];
+  // Per-group DOM refs so clicking a left row scrolls its group into view.
+  const groupRefs = useRef(new Map<string, HTMLDivElement | null>());
+
   if (groups.length === 0 && appOnlyQuestions.length === 0) {
     // Nothing to run: no question carries a file variable OR bound
     // application-data. (Answered / hidden questions ARE offered now.)
@@ -689,113 +818,145 @@ function MapPhase({
       </div>
     );
   }
+
+  const sourceMapped = (s: Source) =>
+    s.fileVar ? Boolean(mapping[s.fileVar]) : true; // app-data is always "ready"
+  const sourceSelectedCount = (s: Source) =>
+    s.questions.filter((q) => selected.has(q.levelId)).length;
+
   return (
     <>
       <div className={styles.sub}>
-        Map each evidence file to one of your uploads, then tick the questions to run.
-        Only ticked questions are sent to the assistant — already-answered ones are
-        unticked by default so they aren’t re-queried.
+        Map each evidence file to an upload, then tick the questions to send. Only
+        ticked questions go to the assistant — already-answered ones are unticked by
+        default. Click a source on the left to jump to its questions.
         {skippedCount > 0 &&
-          ` (${skippedCount} question${skippedCount === 1 ? '' : 's'} have no file variable or application data and are skipped.)`}
+          ` (${skippedCount} question${skippedCount === 1 ? '' : 's'} have no data and are skipped.)`}
       </div>
-      {availableFiles.length === 0 && (
+      {availableFiles.length === 0 && groups.length > 0 && (
         <MessageBar intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            No evidence files have been uploaded yet. Upload the files above first,
-            then map them here.
+            No evidence files have been uploaded yet. Upload them first, then map them
+            here.
           </MessageBarBody>
         </MessageBar>
       )}
-      <div className={styles.mapList}>
-        {groups.map((g) => {
-          const picked = mapping[g.fileVariable] ?? NO_FILE;
-          const isMapped = picked !== NO_FILE;
-          return (
-            <div key={g.fileVariable} className={styles.mapGroup}>
-              <div className={styles.mapRow}>
-                <div className={styles.mapInfo}>
-                  <span className={styles.mapVar}>
-                    <Document16Regular />
-                    {g.fileVariable}
-                  </span>
-                  <span className={styles.mapCount}>
-                    {g.questions.length} question{g.questions.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <Dropdown
-                  className={styles.mapDropdown}
-                  value={picked === NO_FILE ? 'Not mapped' : picked}
-                  selectedOptions={[picked]}
-                  onOptionSelect={(_, d) => onSetVar(g.fileVariable, d.optionValue ?? NO_FILE)}
-                  placeholder="Choose a file…"
+
+      <div className={styles.twoPanel}>
+        {/* Left: sources — a clickable summary that highlights + scrolls to a
+            group on the right. The active row is emphasised so it's obvious
+            which source you're looking at. */}
+        <div className={styles.panel}>
+          <span className={styles.panelHead}>Evidence files & data sources</span>
+          <div className={styles.panelScroll}>
+            {sources.map((s) => {
+              const isActive = s.id === active?.id;
+              const mapped = sourceMapped(s);
+              const selCount = sourceSelectedCount(s);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`${styles.sourceRow} ${isActive ? `${styles.sourceRowActive} ai-glow-border` : ''}`}
+                  onClick={() => {
+                    setActiveId(s.id);
+                    groupRefs.current.get(s.id)?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'nearest',
+                    });
+                  }}
+                  aria-pressed={isActive}
                 >
-                  <Option value={NO_FILE} text="Not mapped">
-                    Not mapped
-                  </Option>
-                  {availableFiles.map((f) => (
-                    <Option key={f} value={f} text={f}>
-                      {f}
-                    </Option>
-                  ))}
-                </Dropdown>
-              </div>
-              {/* Per-question selection — disabled until the variable is mapped,
-                  since an unmapped variable's questions can't be run anyway. */}
-              <div className={styles.qPickList}>
-                {g.questions.map((q) => (
-                  <Checkbox
-                    key={q.levelId}
-                    className={styles.qPick}
-                    checked={selected.has(q.levelId)}
-                    disabled={!isMapped}
-                    onChange={() => onToggleQuestion(q.levelId)}
-                    label={
-                      <span className={styles.qPickLabel}>
-                        {q.label}
-                        {answeredLevelIds.has(q.levelId) && (
-                          <span className={styles.qPickAnswered}>answered</span>
-                        )}
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {appOnlyQuestions.length > 0 && (
-          <div className={styles.mapGroup}>
-            <div className={styles.mapRow}>
-              <div className={styles.mapInfo}>
-                <span className={styles.mapVar}>
-                  <Document16Regular />
-                  Judged from application data
-                </span>
-                <span className={styles.mapCount}>
-                  {appOnlyQuestions.length} question{appOnlyQuestions.length === 1 ? '' : 's'} · no file
-                </span>
-              </div>
-            </div>
-            <div className={styles.qPickList}>
-              {appOnlyQuestions.map((q) => (
-                <Checkbox
-                  key={q.levelId}
-                  className={styles.qPick}
-                  checked={selected.has(q.levelId)}
-                  onChange={() => onToggleQuestion(q.levelId)}
-                  label={
-                    <span className={styles.qPickLabel}>
-                      {q.label}
-                      {answeredLevelIds.has(q.levelId) && (
-                        <span className={styles.qPickAnswered}>answered</span>
-                      )}
+                  <span
+                    className={`${styles.sourceIcon} ${isActive ? styles.sourceIconActive : ''}`}
+                  >
+                    {s.fileVar ? <Document16Regular /> : <Database16Regular />}
+                  </span>
+                  <span className={styles.sourceInfo}>
+                    <span className={styles.sourceName}>{s.name}</span>
+                    <span
+                      className={`${styles.sourceMeta} ${mapped && s.fileVar ? styles.sourceMetaMapped : ''}`}
+                    >
+                      {s.fileVar
+                        ? mapped
+                          ? `${selCount} of ${s.questions.length} selected`
+                          : 'Not mapped'
+                        : `${selCount} of ${s.questions.length} selected · no file`}
                     </span>
-                  }
-                />
-              ))}
-            </div>
+                  </span>
+                  {mapped && s.fileVar && (
+                    <span className={styles.sourceCheck}>
+                      <Checkmark16Filled />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
+
+        {/* Right: ALL sources' questions, grouped. Every group shows its file
+            picker (for file sources) + its question checklist by default. */}
+        <div className={styles.panel}>
+          <span className={styles.panelHead}>Questions</span>
+          <div className={styles.panelScroll}>
+            {sources.map((s) => {
+              const isActive = s.id === active?.id;
+              return (
+                <div
+                  key={s.id}
+                  ref={(el) => {
+                    groupRefs.current.set(s.id, el);
+                  }}
+                  className={`${styles.qGroup} ${isActive ? styles.qGroupActive : ''}`}
+                >
+                  <span className={styles.detailHead}>
+                    {s.fileVar ? `Mapped from ${s.name}` : 'Judged from application data'}
+                  </span>
+
+                  {s.fileVar && (
+                    <Dropdown
+                      className={styles.mapDropdown}
+                      value={mapping[s.fileVar] ?? 'Not mapped'}
+                      selectedOptions={[mapping[s.fileVar] ?? NO_FILE]}
+                      onOptionSelect={(_, d) => onSetVar(s.fileVar!, d.optionValue ?? NO_FILE)}
+                      placeholder="Choose a file…"
+                    >
+                      <Option value={NO_FILE} text="Not mapped">
+                        Not mapped
+                      </Option>
+                      {availableFiles.map((f) => (
+                        <Option key={f} value={f} text={f}>
+                          {f}
+                        </Option>
+                      ))}
+                    </Dropdown>
+                  )}
+
+                  <div className={styles.qPickList}>
+                    {s.questions.map((q) => (
+                      <Checkbox
+                        key={q.levelId}
+                        className={styles.qPick}
+                        checked={selected.has(q.levelId)}
+                        disabled={!sourceMapped(s)}
+                        onChange={() => onToggleQuestion(q.levelId)}
+                        label={
+                          <span className={styles.qPickLabel}>
+                            {q.label}
+                            {answeredLevelIds.has(q.levelId) && (
+                              <span className={styles.qPickAnswered}>answered</span>
+                            )}
+                          </span>
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </>
   );

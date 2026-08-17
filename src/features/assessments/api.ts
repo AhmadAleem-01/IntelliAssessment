@@ -331,6 +331,31 @@ function aiColumns(
 }
 
 /**
+ * Roll up the AI usage on an assessment from its response rows, for the
+ * dashboard's AI metrics. Computed at submit time (when the numbers are final)
+ * and written to two instance columns so the dashboard can read them cheaply
+ * without querying every response.
+ *
+ *  - `dnx_ai_response_count` — how many responses were AI-populated.
+ *  - `dnx_ai_avg_confidence` — mean of those responses' 0–1 confidence scores,
+ *    stored as an integer percentage 0–100 (matches the Whole Number column).
+ *
+ * A response only counts if it's *still* AI-populated: a hand-edit flips
+ * `dnx_ai_populated` to false (see `aiColumns`), so overridden answers correctly
+ * drop out of both the count and the average.
+ */
+function aiRollup(
+  responses: Dnx_assessment_responses[] | undefined,
+): { dnx_ai_response_count: number; dnx_ai_avg_confidence: number } {
+  const aiRows = (responses ?? []).filter((r) => r.dnx_ai_populated === true);
+  const count = aiRows.length;
+  if (count === 0) return { dnx_ai_response_count: 0, dnx_ai_avg_confidence: 0 };
+  const sum = aiRows.reduce((acc, r) => acc + (r.dnx_confidence_score ?? 0), 0);
+  const avgPct = Math.round((sum / count) * 100);
+  return { dnx_ai_response_count: count, dnx_ai_avg_confidence: avgPct };
+}
+
+/**
  * Create or update a response row for a (instance, level) pair.
  *
  * Look up existing rows in the cache (keyed by `_dnx_assessment_level_value`).
@@ -575,11 +600,17 @@ export function useSubmitForReview(instanceId: string) {
         assessmentKeys.detail(instanceId),
       );
       const nextVersion = (cached?.dnx_version ?? 0) + 1;
+      // Freeze the AI-usage rollup at submit — the responses are in cache, so
+      // this is a pure local compute folded into the same PATCH (no extra call).
+      const cachedResponses = qc.getQueryData<Dnx_assessment_responses[]>(
+        assessmentKeys.responses(instanceId),
+      );
       const changes: Record<string, unknown> = {
         statuscode: 778540003, // PendingReview
         dnx_submittedon: new Date().toISOString().slice(0, 10),
         dnx_version: nextVersion,
         dnx_outcome: input?.outcome ?? ASSESSMENT_OUTCOME.Pending,
+        ...aiRollup(cachedResponses),
       };
       const r = await Dnx_assessment_instancesService.update(
         instanceId,

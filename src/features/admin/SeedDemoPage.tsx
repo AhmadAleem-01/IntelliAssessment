@@ -29,7 +29,7 @@ const useStyles = makeStyles({
   title: {
     fontSize: '20px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
     margin: 0,
     display: 'flex',
     alignItems: 'center',
@@ -37,23 +37,23 @@ const useStyles = makeStyles({
   },
   subtitle: {
     fontSize: '13px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     marginTop: '6px',
     lineHeight: 1.5,
   },
   card: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
     padding: '18px',
     marginBottom: '14px',
   },
   warningBox: {
-    backgroundColor: 'var(--color-amber-soft)',
-    border: '0.5px solid var(--color-amber)',
-    color: 'var(--color-text-primary)',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
+    border: '1px solid var(--ds-pending, #F59E0B)',
+    color: 'var(--ds-text-strong)',
     padding: '12px 14px',
-    borderRadius: 'var(--border-radius-md)',
+    borderRadius: '8px',
     fontSize: '12px',
     lineHeight: 1.5,
     marginBottom: '14px',
@@ -63,16 +63,16 @@ const useStyles = makeStyles({
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
-    color: 'var(--color-amber-text)',
+    color: '#b45309',
     marginBottom: '4px',
   },
   runBtn: {
-    backgroundColor: 'var(--color-purple) !important',
+    backgroundColor: 'var(--ds-ai-primary, #8B5CF6) !important',
     color: '#fff !important',
-    border: '0.5px solid var(--color-purple) !important',
+    border: '1px solid var(--ds-ai-primary, #8B5CF6) !important',
     ':hover': {
-      backgroundColor: 'var(--color-purple-text) !important',
-      border: '0.5px solid var(--color-purple-text) !important',
+      backgroundColor: 'var(--ds-ai-primary, #8B5CF6) !important',
+      border: '1px solid var(--ds-ai-primary, #8B5CF6) !important',
     },
   },
   stepList: {
@@ -86,32 +86,32 @@ const useStyles = makeStyles({
     gap: '10px',
     fontSize: '13px',
     padding: '8px 10px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-secondary)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-surface-base)',
   },
-  stepPending: { color: 'var(--color-text-tertiary)' },
-  stepDone: { color: 'var(--color-text-primary)' },
-  stepError: { color: 'var(--color-red-text)' },
+  stepPending: { color: 'var(--ds-text-muted)' },
+  stepDone: { color: 'var(--ds-text-strong)' },
+  stepError: { color: '#b91c1c' },
   stepIcon: { display: 'inline-flex', flexShrink: 0 },
   stepBullet: {
     width: '10px',
     height: '10px',
     borderRadius: '50%',
-    border: '1.5px solid var(--color-text-tertiary)',
+    border: '1.5px solid var(--ds-text-muted)',
     display: 'inline-block',
   },
   spinDot: {
     width: '10px',
     height: '10px',
     borderRadius: '50%',
-    border: '1.5px solid var(--color-purple)',
+    border: '1.5px solid var(--ds-ai-primary, #8B5CF6)',
     borderTopColor: 'transparent',
     animation: 'spin 0.8s linear infinite',
     display: 'inline-block',
   },
   stepMeta: {
     fontSize: '10px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
     marginLeft: 'auto',
   },
@@ -122,7 +122,7 @@ const useStyles = makeStyles({
     marginTop: '8px',
   },
   resultLink: {
-    color: 'var(--color-purple-text)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
     fontWeight: 500,
     textDecoration: 'none',
     fontSize: '13px',
@@ -274,10 +274,10 @@ export function SeedDemoPage() {
                 <span className={styles.stepIcon} aria-hidden>
                   {s.status === 'done' ? (
                     <CheckmarkCircle16Filled
-                      style={{ color: 'var(--color-green-text)' }}
+                      style={{ color: '#047857' }}
                     />
                   ) : s.status === 'error' ? (
-                    <ErrorCircle16Filled style={{ color: 'var(--color-red-text)' }} />
+                    <ErrorCircle16Filled style={{ color: '#b91c1c' }} />
                   ) : running !== null ? (
                     <span className={styles.spinDot} />
                   ) : (
@@ -405,8 +405,8 @@ export function SeedDemoPage() {
               </summary>
               <pre
                 style={{
-                  background: 'var(--color-background-secondary)',
-                  border: '0.5px solid var(--color-border-tertiary)',
+                  background: 'var(--ds-surface-base)',
+                  border: '1px solid var(--ds-border)',
                   borderRadius: 8,
                   padding: 12,
                   fontSize: 12,
@@ -422,8 +422,8 @@ export function SeedDemoPage() {
               </summary>
               <pre
                 style={{
-                  background: 'var(--color-background-secondary)',
-                  border: '0.5px solid var(--color-border-tertiary)',
+                  background: 'var(--ds-surface-base)',
+                  border: '1px solid var(--ds-border)',
                   borderRadius: 8,
                   padding: 12,
                   fontSize: 12,

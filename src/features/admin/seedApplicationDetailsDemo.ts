@@ -20,7 +20,8 @@ import { makeDetailsField, serializeDetailsLayout } from '../applicationDetails/
  *   2. **details layouts** on a Section + a Subsection (drag-drop attributes);
  *   3. **AI bindings** that reference JSON attributes — including a JSON-only
  *      question (no evidence file) so the "judge from application data" path is
- *      demoable end to end.
+ *      demoable end to end, PLUS per-subsection questions that read their own
+ *      array item via `useSubsectionIndex` (Qualification 3 → qualifications[2]).
  * Then an assessment whose `dnx_application_details` File column is pre-loaded
  * with a JSON that matches the sample shape, so the detail panels resolve and
  * AI auto-fill has data to ground on immediately.
@@ -119,6 +120,12 @@ interface CreateLevelOpts {
     fileVariable?: string;
     query?: string;
     applicationDataPaths?: string[];
+    /**
+     * When true, repeating (`[]`) paths resolve at THIS question's subsection
+     * position — e.g. a question in "Qualification 3" reads qualifications[2].
+     * Demonstrates the AI-conditioning "use this subsection's position" option.
+     */
+    useSubsectionIndex?: boolean;
   };
   /** Serialised details layout (attribute paths to show) → dnx_details_layout. */
   detailsPaths?: string[];
@@ -147,6 +154,7 @@ async function createLevel(opts: CreateLevelOpts): Promise<string> {
       fileVariable: b.fileVariable ?? '',
       query: b.query ?? '',
       ...(b.applicationDataPaths?.length ? { applicationDataPaths: b.applicationDataPaths } : {}),
+      ...(b.useSubsectionIndex ? { useSubsectionIndex: true } : {}),
     });
   }
   if (opts.detailsPaths?.length) {
@@ -312,9 +320,12 @@ export async function seedApplicationDetailsDemo(
 
   // Three FIXED subsections, each pinned to one array element via arrayIndex —
   // the "3 Qualification subsections ↔ one JSON array" pattern. Each panel
-  // resolves qualifications[i] (title/institution/year) for its own index.
+  // resolves qualifications[i] (title/institution/year) for its own index, AND
+  // each carries AI-bound questions that read THAT subsection's own array item
+  // via `useSubsectionIndex` (so Qualification 3's questions read
+  // qualifications[2]). This is the subsection-mapped AI-answer showcase.
   for (let i = 0; i < 3; i += 1) {
-    await createLevel({
+    const subQual = await createLevel({
       templateId,
       name: `Qualification ${i + 1}`,
       type: LEVEL_TYPE.Subsection,
@@ -326,6 +337,53 @@ export async function seedApplicationDetailsDemo(
         'qualifications[].year',
       ],
       detailsArrayIndex: i,
+    });
+    // Q1 — copy this qualification's title from its own array slot.
+    await createLevel({
+      templateId,
+      name: 'Qualification title',
+      type: LEVEL_TYPE.Question,
+      order: 0,
+      parentLevelId: subQual,
+      dataType: DATA_TYPE.Text,
+      includeInLetter: true,
+      hintText: 'Reads this subsection’s own qualification from application data.',
+      evidenceBinding: {
+        query:
+          "Copy this qualification's title from the application data (the item matching this subsection's position).",
+        applicationDataPaths: ['qualifications[].title'],
+        useSubsectionIndex: true,
+      },
+    });
+    // Q2 — issuing institution from the same slot.
+    await createLevel({
+      templateId,
+      name: 'Issuing institution',
+      type: LEVEL_TYPE.Question,
+      order: 1,
+      parentLevelId: subQual,
+      dataType: DATA_TYPE.Text,
+      evidenceBinding: {
+        query:
+          "Copy the issuing institution of this subsection's qualification from the application data.",
+        applicationDataPaths: ['qualifications[].institution'],
+        useSubsectionIndex: true,
+      },
+    });
+    // Q3 — a boolean judged from the year in the same slot.
+    await createLevel({
+      templateId,
+      name: 'Completed in the last 15 years?',
+      type: LEVEL_TYPE.Question,
+      order: 2,
+      parentLevelId: subQual,
+      dataType: DATA_TYPE.Boolean,
+      evidenceBinding: {
+        query:
+          "Using this subsection's qualification year from the application data, set true if it is 2011 or later, otherwise false.",
+        applicationDataPaths: ['qualifications[].year'],
+        useSubsectionIndex: true,
+      },
     });
   }
   update('levels', { status: 'done' });
