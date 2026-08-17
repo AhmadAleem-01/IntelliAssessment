@@ -1,437 +1,233 @@
-# Assessment Module — UI Design Specification
+# IntelliAssessment Design System (v1.0 — "Calm Efficiency")
 
-**Project:** CodeApps Assessment Module  
-**Platform:** Microsoft Power Platform (Model-Driven App)  
-**Component:** React / TypeScript (CodeApps)  
-**Version:** 1.0  
-**Status:** Design Draft
+**Status:** Active — this is the **single canonical UI reference**. All new pages
+and all migrations of existing pages MUST follow this document. The Dashboard,
+Projects list, Project detail, Assessments list, Assessment detail (incl.
+checklist), the app shell, and the AI auto-fill dialog are the reference
+implementations — match their patterns.
 
----
-
-## 1. Design Principles
-
-The interface follows a flat, minimal aesthetic that integrates natively with the Power Platform shell. The goal is to minimise visual noise so assessors can focus on data capture and decision-making.
-
-- **Flat surfaces** — no gradients, drop shadows, or decorative effects
-- **Information density** — show what is relevant at the current task level; collapse what is not
-- **Status at a glance** — colour-coded badges and progress indicators make assessment state readable without opening records
-- **AI transparency** — AI-populated fields are always labelled with a confidence score and flagged for review when below threshold
-- **Live feedback** — outcome letter preview and evaluation summary update in real time alongside the checklist
+> History: this replaces an earlier flat-purple spec. The `--color-purple*` brand
+> tokens are legacy; new work uses the `--ds-*` tokens below.
 
 ---
 
-## 2. Colour System
+## 0. How to use this document
 
-All colours use CSS custom properties for automatic light/dark mode adaptation.
+When building or changing any screen:
 
-### Semantic colours (CSS variables)
+1. Use the **`--ds-*` design tokens** (Section 2) — never hard-code hex except the
+   few documented text-on-tint exceptions (e.g. `#047857`, `#b45309`, `#b91c1c`).
+2. Reuse the **component patterns** in Section 4 verbatim (cards, pills, buttons,
+   segmented control, AI surfaces). Don't reinvent a card or a status pill.
+3. Obey the **AI motif rule** (Section 3): violet is for AI only.
+4. Obey the **honesty rule** (Section 5): never fabricate a metric the data model
+   can't back — omit it or show a truthful equivalent.
+5. Verify: `npx tsc --noEmit`, `npx eslint <files>`, `npx vite build` before done.
 
-| Token | Usage |
-|---|---|
-| `--color-background-primary` | Card surfaces, inputs |
-| `--color-background-secondary` | Section headers, collapsed states, metric cards |
-| `--color-background-tertiary` | Page background, progress tracks |
-| `--color-text-primary` | Body text, headings |
-| `--color-text-secondary` | Labels, hints, metadata |
-| `--color-text-tertiary` | Placeholders, disabled states |
-| `--color-border-tertiary` | Default borders (0.5px) |
-| `--color-border-secondary` | Hover/emphasis borders |
+Tokens live in [`src/index.css`](src/index.css) under the `Design System v1.0`
+block. Legacy `--color-*` tokens remain only until every surface is migrated.
 
-### Brand & categorical colours
+---
 
-| Ramp | Hex (mid) | Usage |
+## 1. Brand & Design Direction
+
+The product is a **focused AI assistant**, not a dense data tool. Core philosophy:
+**Calm Efficiency.**
+
+- **Personality:** authoritative, precise, minimalist, reassuring.
+- **Colour intent:** **Blue** = standard / interactive. **Navy** = structure &
+  navigation. **Violet** = AI, and *only* AI — a non-semantic "this was generated,
+  verify it" signal. **Green / Amber / Red** = outcome & status semantics.
+- **Feel:** spacious white cards on a light-grey base, generous whitespace, soft
+  hover lift, one clear focal action per area.
+
+---
+
+## 2. Design Tokens
+
+Defined in [`src/index.css`](src/index.css). Use the CSS variable, not the hex.
+
+### Brand & surfaces
+| Token | Hex | Usage |
 |---|---|---|
-| Purple | `#7F77DD` | Primary action, AI tags, active navigation, letter highlights |
-| Green | `#639922` | Suitable outcome, passed section, on-track workload |
-| Amber | `#EF9F27` | In-progress state, low-confidence AI warnings, overloaded workload |
-| Red | `#E24B4A` | Not suitable, overdue, OCR mismatch |
-| Blue | `#378ADD` | In-progress badge |
-| Teal | `#1D9E75` | Completed progress fills |
-| Gray | `#888780` | Neutral / pending states |
+| `--ds-brand-primary` | `#1A2B3C` | Deep navy — app shell brand mark, nav, high-level headers, segmented-control indicator, dashboard AI hero background |
+| `--ds-brand-accent` | `#3B82F6` | Professional blue — primary buttons, links, active nav/tab, icon chips |
+| `--ds-brand-accent-hover` | `#2F6FE0` | Primary button hover |
+| `--ds-brand-accent-soft` | `#EAF1FE` | Blue tint — icon chips, active nav pill, "in progress" status |
+| `--ds-surface-base` | `#F9FAFB` | App/page background, progress tracks, inset areas |
+| `--ds-surface-card` | `#FFFFFF` | Cards, workspace containers |
+| `--ds-border` | `#E5E7EB` | Standard 1px border for cards, rows, controls |
 
-### Status badge mapping
-
-| Status | Badge style |
-|---|---|
-| In progress | Blue |
-| Pending review | Amber |
-| Complete | Green |
-| Overdue | Red |
-| Not started | Gray |
-| Suitable | Green |
-| Not suitable | Red |
-| Pending evaluation | Gray |
-| AI-populated | Purple |
-
----
-
-## 3. Typography
-
-| Role | Size | Weight |
+### AI identity (violet — AI only)
+| Token | Hex / value | Usage |
 |---|---|---|
-| Page title | 18px | 500 |
-| Card / section heading | 14px | 500 |
-| Body / table cells | 13px | 400 |
-| Labels, hints, metadata | 11–12px | 400 |
-| Uppercase labels | 11px | 500 · 0.4–0.5px letter-spacing |
-
-Font family: `var(--font-sans)` throughout. Sentence case everywhere — no ALL CAPS headings, no Title Case in prose.
-
----
-
-## 4. Layout
-
-### Global shell
-
-```
-┌─────────────────────────────────────────────────┐
-│ Topbar  Logo · Nav tabs · Actions · Avatar       │  52px
-├─────────────────────────────────────────────────┤
-│ Content area  (20px padding)                    │
-│                                                 │
-│   Page header  (title + primary action)         │
-│   ─────────────────────────────────────────     │
-│   Screen content                                │
-│                                                 │
-└─────────────────────────────────────────────────┘
-```
-
-### Topbar
-
-- Height: 52px, 1px bottom border
-- Left: logo wordmark → divider → navigation tabs
-- Right: notification icon → user avatar (initials)
-- Active tab: `background-secondary` fill, `font-weight: 500`
-
-### Navigation tabs (top-level screens)
-
-1. Dashboard
-2. Assessments
-3. Checklist
-4. Templates
-
-### Card anatomy
-
-```
-┌─────────────────────────────────────────────┐
-│ Card header  title · subtitle · actions     │  border-bottom 0.5px
-├─────────────────────────────────────────────┤
-│ Card body    content                        │  18px padding
-└─────────────────────────────────────────────┘
-```
-
-- Background: `--color-background-primary`
-- Border: `0.5px solid --color-border-tertiary`
-- Radius: `--border-radius-lg` (12px)
-
----
-
-## 5. Screens
-
-### 5.1 Dashboard
-
-**Purpose:** High-level operational view for team leads and administrators.
-
-**Layout:** Stat row → two-column middle row → full-width recent assessments table
-
-#### Metric cards (stat row — 4 columns)
-
-| Card | Value | Subtext |
-|---|---|---|
-| Total assessments | 142 | +12 this month |
-| In progress | 38 | 5 overdue (amber) |
-| Pending review | 21 | Awaiting sign-off |
-| Completed this month | 47 | 83% suitable rate (green) |
-
-Card style: `background-secondary`, no border, `border-radius-md`, 14px/24px label/value.
-
-#### Assessor workload panel
-
-- List of assessors with avatar initials, horizontal progress bar, count, and a status badge (On track / Overloaded / At capacity)
-- Progress fill colour: purple for high, teal for mid, coral for critical
-- Badge thresholds configured by admin
-
-#### Outcome breakdown panel
-
-- Named horizontal progress bars: Suitable / Not suitable / Pending review
-- Second sub-section: AI-assisted field stats (auto-populated %, manual override %)
-
-#### Recent assessments table
-
-Columns: Candidate/Project · Template · Assessor · Status · Due · Outcome · Open link
-
----
-
-### 5.2 Assessments list
-
-**Purpose:** Full filterable list of all assessment instances.
-
-**Layout:** Page header → toolbar → data table
-
-#### Toolbar
-
-- Search input (220px, left-padded search icon)
-- Filter dropdowns: Status · Assessor · Template
-- Export button (right-aligned)
-
-#### Table columns
-
-| Column | Notes |
-|---|---|
-| Assessment | Name (bold) + ID (muted, 11px) |
-| Project | Project code |
-| Template | Template name |
-| Assessor | Abbreviated name |
-| Status | Badge |
-| Progress | Inline progress bar + % label |
-| Due date | Red text if overdue |
-| Outcome | Badge |
-| Action | "Open →" text link |
-
-Row hover: `background-secondary` fill on all cells.
-
----
-
-### 5.3 Checklist workspace
-
-**Purpose:** Primary assessment workspace for assessors. The most complex screen.
-
-**Layout:** Page header → two-pane layout (checklist left, summary panel right)
-
-```
-┌──────────────────────────────┬────────────────┐
-│  Checklist card (tabs)       │  Evaluation    │
-│                              │  summary card  │
-│                              │                │
-│                              │  Outcome       │
-│                              │  letter        │
-│                              │  preview card  │
-└──────────────────────────────┴────────────────┘
-   flex: 1                        width: 320px
-```
-
-#### Page header actions
-
-- Back arrow → Assessments list
-- Autosave version badge (purple)
-- Letter preview button
-- Run evaluation button
-- Submit for review button (primary)
-
-#### Checklist tab
-
-Renders the four-level template hierarchy:
-
-**Level 1 — Section header**
-
-```
-[ folder icon ]  Section title         [progress bar]  4/5  [outcome badge]  [chevron]
-background-secondary, border-radius-md, cursor pointer (toggle collapse)
-```
-
-**Level 2 — Subsection block**
-
-```
-┌─ subsection header ──────────────────────────────┐
-│  ● Subsection title              [badge]  [Lock] │
-├──────────────────────────────────────────────────┤
-│  Question list (14px gap between questions)      │
-└──────────────────────────────────────────────────┘
-border: 0.5px, border-radius-md
-```
-
-**Level 3 — Question row**
-
-Each question renders:
-
-1. Label row: question text · required asterisk · AI tag (if applicable) · letter-flag dot (purple, right-aligned, indicates inclusion in outcome letter)
-2. Hint text (11px, secondary colour)
-3. Input control (type-appropriate — see section 6)
-4. If AI-populated: confidence bar + percentage
-5. If confidence below threshold: amber alert block
-
-**Collapsed section state**
-
-Collapsed sections show a summary line: "Expand to view N questions · X answered · [Evidence required if applicable]"
-
-#### Details tab
-
-Two-column grid of read-only field pairs: label (11px uppercase) → value (13px). Full-width fields for multi-line content such as notes.
-
-#### Evidence tab
-
-**Uploaded files list**
-
-Each file item: file-type icon (coloured by type) → name + metadata row → download button
-
-Metadata row format: `Section · Declared type · OCR status · Upload date`
-
-OCR mismatch: amber border on item, warning text in metadata ("OCR: Driver's Licence ⚠ Mismatch")
-
-**Upload zone**
-
-Dashed border, centred icon + text + size/type constraint note. Full-width, padding 20px.
-
-#### Comments tab
-
-- Threaded comment list: avatar → author name · timestamp · context (which question/section) → comment body → Mark resolved button
-- Replies indented 38px (avatar width + gap)
-- New comment: full-width textarea → Post comment button (right-aligned, primary)
-- Internal-only disclaimer on textarea placeholder
-
-#### Version history tab
-
-List of version entries: version number → change summary → author · timestamp → Restore button (purple text link). Current version shows a purple "Current" badge instead of a restore button.
-
-#### Right panel — Evaluation summary card
-
-- Overall progress bar (purple fill)
-- Section-by-section outcome list: name → badge
-- Outcome block (`background-secondary` fill): title label → outcome value → descriptive note
-
-#### Right panel — Outcome letter preview card
-
-- Letter content with live-updating highlighted spans (purple background, darker purple text) for fields pulled from checklist answers
-- Legend note: purple dot icon + "Purple-highlighted fields are pulled live from checklist answers"
-- Pending fields shown in italic secondary text
-
----
-
-### 5.4 Templates
-
-**Purpose:** Template management and rule configuration for admins.
-
-**Layout:** Page header → 4-column template card grid → rule chain panel
-
-#### Template cards
-
-- Template icon (36×36, purple background, 18px icon)
-- Template name (13px, 500)
-- Version + status + section/question counts (11px, secondary)
-- Badge row: Published/Draft/Deprecated · AI-enabled (if applicable)
-- Usage count + last updated (11px, secondary)
-- Action row: Edit button (flex:1) + Duplicate icon button
-
-New template card: dashed border, centred plus icon + label, no fill.
-
-#### Evaluation rule chain panel
-
-Four stacked rule rows connected by down arrows, representing the bottom-up evaluation order:
-
-| Level | Example rule | Config badge |
-|---|---|---|
-| Question | Institution in Australia → set field = Domestic | Weighted · 20% |
-| Subsection | "Is qualification valid?" = Yes → Qualification 1 = Suitable | Boolean · threshold 3 |
-| Section | 3 of 5 subsections = Suitable → Qualification Section = Passed | Grouped · 40% weight |
-| Assessment | All 3 required sections = Passed → Assessment Outcome = Suitable | All pass |
-
----
-
-## 6. Input controls
-
-| Question data type | Control |
-|---|---|
-| Boolean | Two-button toggle group: Yes (green when selected) / No (red when selected) |
-| Option set (single) | Native `<select>` dropdown, auto-width |
-| Option set (multi) | Checkbox group |
-| Text | Single-line `<input type="text">` |
-| Multi-line text | `<textarea>` with `resize: vertical`, `min-height: 60px` |
-| Date | `<input type="date">` |
-
-All inputs: `0.5px solid --color-border-tertiary` border, `border-radius-md`, `background-primary`, 13px font, 7px vertical padding.
-
----
-
-## 7. AI field indicators
-
-### AI tag
-
-Inline pill attached to question label. Purple background, sparkle icon, "AI" text. Applied to any field where the answer was or can be auto-populated.
-
-### Confidence bar
-
-Displayed below AI-populated inputs:
-
-```
-AI confidence  [──────────────────────]  91%
-               progress track (3px high)
-```
-
-Colour mapping:
-- ≥ 80%: green fill
-- 60–79%: amber fill (also triggers low-confidence alert)
-- < 60%: red fill (mandatory manual review)
-
-### Low-confidence alert block
-
-Amber background (`#FAEEDA`), amber border, warning triangle icon, 12px text. Displayed inline beneath the affected input when confidence is below the configured threshold.
-
-### Manual override
-
-When an assessor edits an AI-populated field, the system logs `manual_override = true` and records the change in version history with the assessor's identity and timestamp.
-
----
-
-## 8. OCR document mismatch
-
-When the declared document type and the OCR-verified type differ:
-
-- The evidence file item gains an amber border
-- The metadata row shows: `OCR: [Identified type] ⚠ Mismatch`
-- An alert is surfaced to the assessor in the Evidence tab
-
----
-
-## 9. Outcome letter flag
-
-Questions flagged for inclusion in the outcome letter display a small filled purple circle (6×6px) at the right edge of the label row. These same fields are rendered as highlighted spans in the live letter preview panel.
-
----
-
-## 10. Section locking
-
-Each subsection header includes a Lock button. When activated:
-
-- The subsection becomes `is_read_only = true` in Dataverse
-- All inputs within the subsection render as read-only
-- A lock icon replaces the Lock button to indicate the locked state
-- Locking is only available to users with Reviewer or Admin role
-
----
-
-## 11. Autosave & version badge
-
-- Progressive autosave triggers on every field change
-- The current version number is displayed as a badge in the checklist page header: `Autosaved v14`
-- Each save creates a new Assessment Version record capturing the full JSON snapshot, changed-by user, and timestamp
-
----
-
-## 12. Component spacing reference
-
+| `--ds-ai-primary` | `#8B5CF6` | AI icons, AI value text, glow ring, confidence, AI buttons |
+| `--ds-ai-surface` | `#F5F3FF` | Background for AI cards / AI-suggested content |
+| `--ds-ai-glow` | `rgba(139,92,246,0.1)` | Soft outer glow on AI-active surfaces |
+| `--ds-ai-border` | `rgba(139,92,246,0.45)` | Border on AI surfaces |
+
+### Semantic (outcome & status)
+| Token | Hex | Soft tint | Text-on-tint |
+|---|---|---|---|
+| Suitable / success | `--ds-suitable` `#10B981` | `--ds-suitable-soft` `#E7F7F1` | `#047857` |
+| Not suitable / danger | `--ds-not-suitable` `#EF4444` | `--ds-not-suitable-soft` `#FDEAEA` | `#b91c1c` |
+| Pending / warning | `--ds-pending` `#F59E0B` | `--ds-pending-soft` `#FDF3E2` | `#b45309` |
+
+> Status pills use `soft tint` background + the darker `text-on-tint` colour + a
+> dot in the full semantic colour. These three text-on-tint hexes are the only
+> sanctioned hard-coded colours.
+
+### Typography
+Font: **Inter** (`--font-sans`). Fluent components hard-set their own font on some
+parts (Checkbox/Radio/Field labels) — the global override in `index.css` forces
+those back to Inter. When adding new Fluent text parts that mismatch, extend that
+override rather than patching per-component.
+
+| Role | Token | Size / weight | Colour |
+|---|---|---|---|
+| H1 (page title) | `--ds-fs-h1` | 24px / 600 | `--ds-text-strong` `#111827` |
+| H2 (card/section header) | `--ds-fs-h2` | 18px / 600 | `--ds-text-heading` `#374151` |
+| Body | `--ds-fs-body` | 14px / 400–500 | `--ds-text-body` `#4B5563` |
+| Caption (labels, meta, provenance) | `--ds-fs-caption` | 12px | `--ds-text-muted` `#6B7280` |
+| Uppercase micro-label | — | 10–11px / 600, `letter-spacing: 0.05em` | `--ds-text-muted` |
+
+### Shape & space
 | Token | Value | Usage |
 |---|---|---|
-| Page padding | 20px | Content area inset |
-| Card padding | 18px | Card body |
-| Card header padding | 14px 18px | Card header |
-| Section gap | 24px | Between sections |
-| Question gap | 14px | Between questions within a subsection |
-| Subsection gap | 10px | Between subsection blocks |
-| Grid gap (stats) | 12px | Metric card row |
-| Grid gap (two-col) | 16px | Main two-column layouts |
-| Right panel width | 320px | Evaluation summary + letter preview |
-| Badge padding | 3px 8px | Standard badge |
-| Badge radius | 20px | Pill shape |
-| Border width | 0.5px | All card and input borders |
-| Featured border | 2px | Highlighted/featured card only |
+| `--ds-radius-card` | `14px` | Cards, panels, hero surfaces |
+| (control radius) | `6px` | Boxy inputs/dropdowns (search, sort, range) |
+| (nested/pill radius) | `9–12px` | Segmented control, pill buttons |
+| `--ds-radius-pill` | `999px` | Status/outcome pills |
+| `--ds-space-container` | `32px` | Whitespace-as-a-tool for large containers |
+| Card padding | `18–22px` | Standard card internal padding |
+| Grid gap | `16px` | Between cards in a row/grid |
 
 ---
 
-## 13. Accessibility notes
+## 3. The AI Motif (violet — AI only)
 
-- All icon-only buttons carry `aria-label` text
-- Decorative icons use `aria-hidden="true"`
-- Colour is never the sole indicator of status — badges include text labels
-- Required fields are marked with both a red asterisk and `is_required` validation
-- Hint text is associated with its question via proximity and visual grouping
-- Target WCAG 2.1 AA compliance for keyboard navigation and colour contrast
+AI is a first-class, *identifiable* capability. Every AI touchpoint shares one
+violet identity; nothing else in the app may use violet.
+
+**AI surfaces get, in order of prominence:**
+1. **Animated glow border** (`.ai-glow-border` in `index.css`) — a rotating violet
+   conic-gradient ring. Reserved for **hero AI surfaces**: the dashboard AI card,
+   the AI auto-fill dialog, the AI auto-fill trigger button, the selected source
+   in the auto-fill dialog. Respects `prefers-reduced-motion`.
+   - **Gotcha:** on a Fluent `Button`, the ring is hidden by the button's own
+     chrome — wrap the button in a `<span class="ai-glow-border">` with a small
+     padding gap instead of applying the class to the button.
+2. **Sparkles** (`.ai-sparkle`) — small twinkling stars around a hero AI card
+   (dashboard). Decorative, `aria-hidden`, staggered via `--sparkle-delay`.
+3. **Soft-violet card** — `--ds-ai-surface` fill + `--ds-ai-border`, for AI
+   content that isn't the single hero (e.g. per-answer AI badge, AI-usage tiles).
+4. **Violet text/icon** — `--ds-ai-primary` for AI values, the Sparkle icon,
+   confidence figures.
+
+**AI content is always a reviewable draft.** Present a clear Accept action;
+accepting converts violet "AI" styling into standard navy "verified" styling.
+Show confidence as a *supporting* metric, never as final truth. Link AI answers
+back to their source (evidence file / application-data attribute).
+
+---
+
+## 4. Component Patterns (reference implementations)
+
+### Card
+White (`--ds-surface-card`), `1px solid --ds-border`, `--ds-radius-card`, 18–22px
+padding. Header = H2. Optional muted caption on the right of the header
+(`space-between`, `align-items: baseline`).
+
+### Status / outcome pill
+Rounded-full (`--ds-radius-pill`), **lowercase**, 12px/500, with a **leading dot**
+in the full semantic colour; background = soft tint, text = text-on-tint.
+Mapping: draft → grey, in progress → blue, pending review/"review" → amber,
+complete/"signed off" → green; suitable → green, not suitable → red.
+
+### Buttons
+- **Primary:** `--ds-brand-accent` fill, white text, `--ds-brand-accent-hover` on
+  hover. (Override Fluent's `appearance="primary"` via a `className`.)
+- **Secondary:** neutral, `--ds-border`.
+- **Destructive:** transparent with red text + red-tint hover.
+- **AI action:** hollow (transparent fill, violet text/icon) wrapped in
+  `.ai-glow-border`; bold label. Never a solid violet block for a routine action.
+
+### List row (assessments, queue)
+White card row, `1px --ds-border`, `--ds-radius-card`, hover = subtle lift
+(`translateY(-1px)`) + soft shadow + border darken (NOT a background swap). Two-line
+cell: bold name + muted meta line (`owner · updated Nh ago`). Small square avatar
+chip with initials in blue-tint.
+
+### Segmented control (scope toggle)
+White rounded container; a **single sliding indicator** (navy `--ds-brand-primary`)
+behind equal-width tabs, animated with `transform: translateX(index * 100%)` and a
+springy `cubic-bezier(0.34, 1.4, 0.5, 1)`. Text cross-fades muted → white as the
+indicator arrives. Active text is forced white (`!important`) so equal-specificity
+hover can't dim it. Inactive hover → `--ds-text-body`, never harsh black.
+
+### Boxy inputs / dropdowns (search, sort, date-range)
+Squarish `6px` radius, ~40px tall, `1px --ds-border`, white, no Fluent underline
+(`::after { display: none }`). **Dropdown gotcha:** put the border on the dropdown
+**root only** and make the inner `& button` `border: none` + transparent —
+bordering both the root and the button produces a **double border**.
+
+### Progress / bars
+Track = `--ds-surface-base`, rounded. Fill must be a **block** element (inline
+spans ignore width/height) with a `min-width` so a tiny share still shows.
+
+### Collapsible checklist (assessment detail)
+Section = card with an H2 header (hover tint); subsection = nested bordered block
+with a blue-accent bullet. Progressive disclosure: don't show everything at once;
+lean on collapse. Question rows separated by hairline dividers, not floating gaps.
+
+---
+
+## 5. Layout & Content Principles
+
+1. **Whitespace as a tool** — generous padding; avoid the "wall of text." One
+   focal action per area.
+2. **Progressive disclosure** — collapse the complete/irrelevant; reveal on demand.
+3. **Column ratios** — two-card rows on content-heavy pages use **60/40**
+   (`gridTemplateColumns: '3fr 2fr'`), content-heavy card on the left. Collapse to
+   one column under 900px.
+4. **The "Verify" workflow** — AI drafts, human confirms; the UI makes that
+   conversion explicit.
+5. **Honesty rule (important).** Never fabricate a metric the data model can't
+   back. If the data isn't there (e.g. median-days-in-stage, assessor capacity,
+   first-pass approval %, per-row completion %), **omit it or show a truthful
+   equivalent** — do not invent numbers. Prefer computing from already-loaded data
+   over adding per-row queries.
+
+---
+
+## 6. Do's & Don'ts
+
+| ✅ Do | ❌ Don't |
+|---|---|
+| Use violet **only** for AI content | Use violet for standard buttons/links/nav |
+| Reserve the animated glow ring for hero AI surfaces | Spin a glow ring on every tiny AI badge |
+| Use `--ds-*` tokens | Hard-code hex (except the 3 text-on-tint colours) |
+| Rounded-full lowercase pills with a dot | Bright bordered rectangular badges |
+| Subtle hover lift + shadow on rows/cards | Background-swap or harsh black-text hover |
+| Border a dropdown on its root only | Border both root and inner button (double edge) |
+| Show confidence as supporting context | Present AI output as final/immutable |
+| Omit metrics the data can't back | Fabricate a plausible-looking number |
+| Compute from loaded data | Fire a query per row for a dashboard stat |
+
+---
+
+## 7. Migration status
+
+Migrated to v1.0: **Dashboard, Projects list, Project detail, Assessments list
+(+ shared `AssessmentList`), Assessment detail + checklist + question rows, app
+shell/topbar, AI auto-fill dialog, evidence AI trigger, per-answer AI badge.**
+
+Still on legacy tokens (migrate using this doc when touched): **Template editor
+(tabs, tree, AI-conditioning, letter designer, application-details builder),
+various dialogs/drawers (comments, history, letter, submit/approve/reject),
+seed/demo pages.**
+
+Baseline lint debt to leave alone (pre-existing, not from styling work):
+`AssessmentPage` `setLastSavedAt` set-state-in-effect; `ChecklistRenderer`
+`rowRefs.current` during render + empty-interface `SubsectionBlockProps`;
+`LevelDialog` set-state-in-effect.

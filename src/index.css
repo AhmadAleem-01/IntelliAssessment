@@ -67,6 +67,50 @@
   --fs-body: 13px;
   --fs-label: 12px;
   --fs-meta: 11px;
+
+  /*
+   * ── Design System v1.0 ("Calm Efficiency") ─────────────────────────────
+   * New visual direction (newdesign.md). Being rolled out screen-by-screen;
+   * legacy tokens above remain until every surface is migrated.
+   *
+   * Colour philosophy: Blue = standard/interactive, Navy = structure/nav,
+   * Violet = AI-ONLY (a non-semantic "generated, verify me" signal — never
+   * use it for ordinary buttons/actions).
+   */
+  --ds-brand-primary: #1a2b3c;   /* Deep Navy — sidebar/nav/high-level headers */
+  --ds-brand-accent: #3b82f6;    /* Professional Blue — primary buttons, active tab */
+  --ds-brand-accent-hover: #2f6fe0;
+  --ds-brand-accent-soft: #eaf1fe;
+  --ds-surface-base: #f9fafb;    /* app background */
+  --ds-surface-card: #ffffff;    /* workspace containers */
+
+  --ds-ai-primary: #8b5cf6;      /* Electric Violet — AI icons/borders/confidence */
+  --ds-ai-surface: #f5f3ff;      /* AI-suggested card background */
+  --ds-ai-glow: rgba(139, 92, 246, 0.1);
+  --ds-ai-border: rgba(139, 92, 246, 0.45);
+
+  --ds-suitable: #10b981;
+  --ds-suitable-soft: #e7f7f1;
+  --ds-not-suitable: #ef4444;
+  --ds-not-suitable-soft: #fdeaea;
+  --ds-pending: #f59e0b;
+  --ds-pending-soft: #fdf3e2;
+
+  --ds-text-strong: #111827;     /* H1 */
+  --ds-text-heading: #374151;    /* H2 */
+  --ds-text-body: #4b5563;       /* body */
+  --ds-text-muted: #6b7280;      /* captions / provenance */
+  --ds-border: #e5e7eb;
+
+  /* Spacing — whitespace as a tool: 32px min for main containers */
+  --ds-space-container: 32px;
+  --ds-radius-card: 14px;
+  --ds-radius-pill: 999px;
+
+  --ds-fs-h1: 24px;
+  --ds-fs-h2: 18px;
+  --ds-fs-body: 14px;
+  --ds-fs-caption: 12px;
 }
 
 html,
@@ -137,6 +181,65 @@ body {
   border-bottom-width: 1px !important;
 }
 
+/*
+ * Fluent components hard-set their own font family (Segoe UI via
+ * --fontFamilyBase) on some text parts — notably Checkbox / Radio labels — which
+ * mismatches the app's Inter. Force those back to our stack. Scoped to the label
+ * parts so we don't disturb Fluent's icon fonts.
+ */
+[class*='fui-Checkbox__label'],
+[class*='fui-Radio__label'],
+[class*='fui-Field__label'] {
+  font-family: var(--font-sans) !important;
+}
+
+/*
+ * Expanding floating action button — a circular icon button that grows on hover
+ * (and keyboard focus) to reveal its label. Shared by the back-to-top FAB and
+ * the "Application details" jump so they animate identically. Markup:
+ *   <button class="fab-expand"><span class="fab-icon">…</span><span class="fab-label">Text</span></button>
+ */
+.fab-expand {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  width: 44px;
+  padding: 0 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  gap: 0;
+  font-size: 13px;
+  font-weight: 600;
+  transition: width 0.24s cubic-bezier(0.34, 1.1, 0.5, 1), gap 0.24s ease, background-color 0.1s ease;
+}
+.fab-expand > .fab-icon {
+  display: flex;
+  flex: 0 0 22px;
+  justify-content: center;
+}
+.fab-expand > .fab-label {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 0.24s ease, opacity 0.18s ease;
+}
+.fab-expand:hover,
+.fab-expand:focus-visible {
+  width: auto;
+  gap: 8px;
+}
+.fab-expand:hover > .fab-label,
+.fab-expand:focus-visible > .fab-label {
+  max-width: 200px;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab-expand,
+  .fab-expand > .fab-label { transition: none; }
+}
+
 /* Autosave indicator pulse — used by AssessmentPage save badge */
 @keyframes save-pulse {
   0%, 100% { opacity: 0.25; transform: scale(0.85); }
@@ -183,6 +286,87 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/*
+ * AI "glowing animated border" — Gemini-style rotating gradient ring, used to
+ * mark AI-only surfaces (e.g. the dashboard AI-adoption card). Implemented with
+ * an animatable @property angle so the conic gradient can spin smoothly; the
+ * ring lives on a ::before layer masked to a 1.5px band so only the border
+ * glows, and a soft violet box-shadow provides the outer glow.
+ *
+ * Respects prefers-reduced-motion by holding the gradient static.
+ */
+@property --ai-glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes ai-glow-spin {
+  to { --ai-glow-angle: 360deg; }
+}
+
+.ai-glow-border {
+  position: relative;
+  isolation: isolate;
+  box-shadow: 0 0 18px -4px var(--ds-ai-glow, rgba(139, 92, 246, 0.1));
+}
+.ai-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: 1.5px;               /* border thickness */
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--ai-glow-angle),
+    #8b5cf6,
+    #c4b5fd,
+    #8b5cf6,
+    #6d28d9,
+    #8b5cf6
+  );
+  /* Mask so the gradient shows only in the padding band (the "border"). */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: ai-glow-spin 4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-glow-border::before { animation: none; }
+}
+
+/*
+ * AI sparkles — small four-point stars that twinkle (scale + fade + gentle
+ * rotate) around an AI surface. Place `.ai-sparkle` spans inside a positioned
+ * container; each can set its own top/left/size via inline style, and a
+ * `--sparkle-delay` to stagger the twinkle. The star shape is a CSS mask so it
+ * inherits the violet colour via `background`.
+ */
+@keyframes ai-sparkle-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  50%      { opacity: 1; transform: scale(1) rotate(90deg); }
+}
+
+.ai-sparkle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  background: var(--ds-ai-primary, #8b5cf6);
+  /* Four-point sparkle (concave star) drawn as a mask. */
+  -webkit-mask: radial-gradient(closest-side at 50% 50%, transparent 62%, #000 63%) 0 0 / 100% 100%,
+    conic-gradient(#000 0 0);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 0c.8 6.2 5 10.4 12 12-7 1.6-11.2 5.8-12 12-.8-6.2-5-10.4-12-12C7 10.4 11.2 6.2 12 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 0c.8 6.2 5 10.4 12 12-7 1.6-11.2 5.8-12 12-.8-6.2-5-10.4-12-12C7 10.4 11.2 6.2 12 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  animation: ai-sparkle-twinkle 2.4s ease-in-out infinite;
+  animation-delay: var(--sparkle-delay, 0s);
+  filter: drop-shadow(0 0 3px var(--ds-ai-glow, rgba(139, 92, 246, 0.5)));
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-sparkle { animation: none; opacity: 0.7; }
 }
 
 /* Answer-reference chip inside the letter builder's content-editable fields.
