@@ -9,21 +9,18 @@ import {
   Spinner,
   MessageBar,
   MessageBarBody,
-  Tooltip,
+  Dialog,
+  DialogSurface,
   makeStyles,
 } from '@fluentui/react-components';
 import {
   Add16Regular,
-  Delete16Regular,
-  Copy16Regular,
   ReOrderDotsVertical24Regular,
   TextAlignLeft16Regular,
   TextAlignCenter16Regular,
   TextAlignRight16Regular,
-  ArrowCounterclockwise16Regular,
   Image16Regular,
-  ChevronDown16Regular,
-  ChevronRight16Regular,
+  Dismiss20Regular,
 } from '@fluentui/react-icons';
 import {
   DndContext,
@@ -76,226 +73,371 @@ import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assess
 
 const AUTOSAVE_MS = 900;
 
+/** One-line subtitle under each block in the left list. */
+function blockSubtitle(b: LetterBlock): string {
+  switch (b.type) {
+    case 'heading':
+      return b.text || 'Heading';
+    case 'text':
+      return b.text.split('\n')[0] || 'Paragraph';
+    case 'meta':
+      return `${b.fields.length} of ${Object.keys(META_FIELD_LABEL).length} fields`;
+    case 'outcome':
+      return 'Pass / fail block';
+    case 'reviewerNotes':
+      return 'Hidden when empty';
+    case 'responses':
+      return 'Answers marked for the letter';
+    case 'groupedSubsections':
+      return b.heading || 'Grouped subsections';
+    case 'signature':
+      return b.text || 'Signature line';
+    case 'spacer':
+      return `${b.size}px space`;
+  }
+}
+
 const useStyles = makeStyles({
   root: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(360px, 1fr) minmax(380px, 1fr)',
-    gap: '16px',
+    gridTemplateColumns: '250px minmax(0, 1fr) minmax(360px, 460px)',
+    gap: '20px',
     alignItems: 'start',
+    '@media (max-width: 1180px)': { gridTemplateColumns: '230px minmax(0, 1fr)' },
+    '@media (max-width: 860px)': { gridTemplateColumns: '1fr' },
   },
-  panel: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
+  card: {
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
     overflow: 'hidden',
   },
-  panelHeader: {
-    padding: '12px 16px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+  stickyPane: {
+    position: 'sticky',
+    top: '80px',
+    '@media (max-width: 1180px)': { position: 'static' },
+  },
+
+  /* ---- Left: block list ---- */
+  listHead: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
-    gap: '8px',
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    padding: '16px 16px 12px',
+    borderBottom: '1px solid var(--ds-border)',
   },
-  saveState: {
-    fontSize: '11px',
-    color: 'var(--color-text-tertiary)',
-    fontWeight: 400,
-  },
-  palette: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-    padding: '12px 16px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
-    backgroundColor: 'var(--color-background-secondary)',
-  },
-  blockList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    padding: '14px 16px',
-    maxHeight: '64vh',
-    overflow: 'auto',
-  },
-  blockCard: {
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
-  },
-  blockTop: {
+  listTitle: { fontSize: 'var(--ds-fs-h2)', fontWeight: 600, color: 'var(--ds-text-strong)' },
+  listCount: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)' },
+  list: { display: 'flex', flexDirection: 'column', paddingBottom: '4px' },
+  item: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '8px 10px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
-    backgroundColor: 'var(--color-background-secondary)',
+    padding: '11px 14px 11px 12px',
+    borderLeft: '3px solid transparent',
+    cursor: 'pointer',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)' },
+    ':hover .blk-grip': { opacity: 1 },
   },
+  itemActive: { backgroundColor: 'var(--ds-surface-base)', borderLeftColor: 'var(--ds-brand-primary)' },
   grip: {
     display: 'inline-flex',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     cursor: 'grab',
     touchAction: 'none',
+    opacity: 0,
+    transition: 'opacity 0.1s ease',
+    flexShrink: 0,
+    marginLeft: '-4px',
     ':active': { cursor: 'grabbing' },
+    '& svg': { width: '16px', height: '16px' },
   },
-  blockType: {
-    fontSize: '11px',
+  itemText: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' },
+  itemName: {
+    fontSize: 'var(--ds-fs-body)',
     fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--color-purple-text)',
-    flex: 1,
+    color: 'var(--ds-text-strong)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
-  blockBody: { padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  fixedNote: {
-    fontSize: '11px',
-    color: 'var(--color-text-tertiary)',
-    fontStyle: 'italic',
-    padding: '2px',
+  itemSub: {
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
-  metaGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '2px 12px',
+  blankTag: {
+    fontSize: '9px',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    color: 'var(--ds-pending-text, #b45309)',
+    flexShrink: 0,
   },
-  alignRow: { display: 'flex', gap: '4px' },
-  alignBtnActive: {
-    backgroundColor: 'var(--color-purple-soft) !important',
-    color: 'var(--color-purple-text) !important',
-  },
-  placeholderHint: {
+  addSection: { padding: '12px 14px', borderTop: '1px solid var(--ds-border)' },
+  addLabel: {
     fontSize: '10px',
-    color: 'var(--color-text-tertiary)',
-    lineHeight: 1.5,
-  },
-  insertAnswer: { minWidth: 0, width: '100%' },
-  iconBtn: { minWidth: 0 },
-  previewWrap: {
-    padding: '14px',
-    backgroundColor: 'var(--color-background-tertiary)',
-    // Tall enough to show a full A4 page (740px wide ≈ 1047px tall) without
-    // scrolling; only scrolls when the authored letter runs longer than a page.
-    maxHeight: '90vh',
-    overflow: 'auto',
-  },
-  empty: {
-    padding: '30px 16px',
-    textAlign: 'center',
-    fontSize: '13px',
-    color: 'var(--color-text-secondary)',
-    lineHeight: 1.5,
-  },
-  // --- Page settings (letterhead) ---
-  pageSettings: {
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
-    backgroundColor: 'var(--color-background-secondary)',
-  },
-  pageSettingsToggle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    width: '100%',
-    padding: '10px 16px',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: 600,
+    fontWeight: 700,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--color-text-secondary)',
-    textAlign: 'left',
+    letterSpacing: '0.06em',
+    color: 'var(--ds-text-muted)',
+    marginBottom: '8px',
   },
-  pageSettingsBody: {
-    padding: '0 16px 14px',
+  addBtns: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
+  addBtn: {
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-body)',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)', color: 'var(--ds-text-strong)' },
+  },
+
+  /* Tips / legend at the foot of the left panel */
+  tips: {
+    padding: '12px 14px',
+    borderTop: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-base)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
   },
-  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  fieldLabel: {
+  tipsLabel: {
+    fontSize: '10px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: 'var(--ds-text-muted)',
+  },
+  tipRow: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-body)', lineHeight: 1.5 },
+  tipKbd: {
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     fontSize: '11px',
-    fontWeight: 500,
-    color: 'var(--color-text-secondary)',
+    fontWeight: 600,
+    padding: '1px 6px',
+    borderRadius: '5px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    color: 'var(--ds-text-strong)',
   },
-  bgRow: {
+  tipTokens: { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' },
+  tipToken: {
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontSize: '11px',
+    padding: '2px 6px',
+    borderRadius: '5px',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-muted)',
+  },
+
+  /* ---- Center: config ---- */
+  cfgHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '16px 20px',
+    borderBottom: '1px solid var(--ds-border)',
+  },
+  cfgKicker: {
+    fontSize: '10px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.07em',
+    color: 'var(--ds-text-muted)',
+  },
+  cfgTitle: { fontSize: 'var(--ds-fs-h2)', fontWeight: 600, color: 'var(--ds-text-strong)', marginTop: '3px' },
+  cfgActions: { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 },
+  autosave: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)' },
+  dupBtn: {
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-body)',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)', color: 'var(--ds-text-strong)' },
+  },
+  delBtn: { color: 'var(--ds-not-suitable, #EF4444)', background: 'transparent', border: 'none' },
+  cfgBody: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' },
+
+  fieldLabel: { fontSize: 'var(--ds-fs-body)', fontWeight: 600, color: 'var(--ds-text-strong)', marginBottom: '8px' },
+  fieldGroup: { display: 'flex', flexDirection: 'column' },
+  twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
+  input: {
+    borderRadius: '8px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    '::after': { display: 'none' },
+    '& input': { borderRadius: '8px', height: '38px', fontSize: 'var(--ds-fs-body)' },
+  },
+  alignRow: { display: 'flex', gap: '6px' },
+  alignBtn: {
+    minWidth: '34px',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-body)',
+  },
+  alignBtnActive: {
+    backgroundColor: 'var(--ds-brand-primary) !important',
+    color: '#fff !important',
+    border: '1px solid transparent',
+  },
+  metaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
+  metaCell: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
+    gap: '10px',
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
   },
+  metaCellOn: { backgroundColor: 'var(--ds-surface-base)' },
+  noSettings: {
+    padding: '22px',
+    borderRadius: '10px',
+    backgroundColor: 'var(--ds-surface-base)',
+    border: '1px solid var(--ds-border)',
+    textAlign: 'center',
+  },
+  noSettingsTitle: { fontSize: 'var(--ds-fs-body)', fontWeight: 600, color: 'var(--ds-text-strong)' },
+  noSettingsSub: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)', marginTop: '4px', lineHeight: 1.45 },
+  amberNote: {
+    padding: '12px 14px',
+    borderRadius: '10px',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
+    border: '1px solid var(--ds-pending, #F59E0B)',
+    fontSize: 'var(--ds-fs-caption)',
+    lineHeight: 1.5,
+    color: '#b45309',
+  },
+  amberNoteTitle: { fontWeight: 700, marginBottom: '3px' },
+  hint: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)', lineHeight: 1.45 },
+
+  /* Insert-value chips row */
+  insertLabel: { fontSize: 'var(--ds-fs-body)', fontWeight: 600, color: 'var(--ds-text-strong)', marginBottom: '8px' },
+
+  /* Background controls */
+  bgRow: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
   bgThumb: {
-    width: '48px',
-    height: '48px',
-    borderRadius: 'var(--border-radius-sm)',
-    border: '0.5px solid var(--color-border-secondary)',
+    width: '52px',
+    height: '52px',
+    borderRadius: '8px',
+    border: '1px solid var(--ds-border)',
     objectFit: 'cover',
     backgroundColor: '#fff',
   },
-  bgControls: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  bgControlRow: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
-  bgControlLabel: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+  bgFileInfo: { display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0, flex: 1 },
+  bgFileName: { fontSize: 'var(--ds-fs-body)', fontWeight: 600, color: 'var(--ds-text-strong)' },
+  bgFileMeta: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)' },
+  sliderRow: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  sliderTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  slider: { width: '100%', accentColor: 'var(--ds-ai-primary, #8B5CF6)' },
+  fitRow: { display: 'flex', gap: '6px' },
+  posGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 26px)', gridTemplateRows: 'repeat(3, 26px)', gap: '4px' },
+  posCell: {
+    width: '26px',
+    height: '26px',
+    padding: 0,
+    borderRadius: '5px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    cursor: 'pointer',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)' },
+  },
+  posCellActive: { backgroundColor: 'var(--ds-brand-primary) !important', border: '1px solid transparent' },
+  hiddenFile: { display: 'none' },
+
+  /* ---- Right: preview ---- */
+  pvHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '10px',
+    padding: '14px 16px',
+    borderBottom: '1px solid var(--ds-border)',
+    flexWrap: 'wrap',
   },
-  posGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 18px)',
-    gridTemplateRows: 'repeat(3, 18px)',
-    gap: '3px',
-  },
-  posCell: {
-    width: '18px',
-    height: '18px',
-    padding: 0,
-    borderRadius: '3px',
-    border: '0.5px solid var(--color-border-secondary)',
-    backgroundColor: 'var(--color-background-primary)',
+  pvTitle: { fontSize: 'var(--ds-fs-body)', fontWeight: 600, color: 'var(--ds-text-strong)' },
+  pvMeta: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)', flex: 1 },
+  zoomGroup: { display: 'inline-flex', gap: '4px' },
+  zoomBtn: {
+    fontFamily: 'var(--font-sans)',
+    fontSize: 'var(--ds-fs-caption)',
+    fontWeight: 600,
+    padding: '5px 10px',
+    borderRadius: '7px',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    color: 'var(--ds-text-body)',
     cursor: 'pointer',
-    ':hover': { backgroundColor: 'var(--color-purple-soft)' },
+    ':hover': { backgroundColor: 'var(--ds-surface-base)' },
   },
-  posCellActive: {
-    backgroundColor: 'var(--color-purple) !important',
-    border: '0.5px solid var(--color-purple) !important',
+  zoomBtnActive: { backgroundColor: 'var(--ds-brand-primary)', color: '#fff', borderColor: 'var(--ds-brand-primary)' },
+  pvBody: {
+    padding: '16px',
+    backgroundColor: 'var(--ds-surface-base)',
+    maxHeight: 'calc(100vh - 220px)',
+    overflow: 'auto',
   },
-  hiddenFile: { display: 'none' },
+  pvScale: { transformOrigin: 'top left', width: '740px' },
+
+  /* Zoom modal */
+  zoomSurface: {
+    maxWidth: '96vw',
+    width: 'auto',
+    padding: 0,
+    backgroundColor: 'var(--ds-surface-base)',
+    maxHeight: '94vh',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  zoomHead: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '14px 18px',
+    borderBottom: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+  },
+  zoomBody: { padding: '20px', overflow: 'auto' },
+  closeBtn: { color: 'var(--ds-text-muted)', ':hover': { color: 'var(--ds-text-strong)' } },
+
+  empty: {
+    padding: '40px 20px',
+    textAlign: 'center',
+    fontSize: 'var(--ds-fs-body)',
+    color: 'var(--ds-text-muted)',
+    lineHeight: 1.5,
+  },
 });
+
+type Styles = ReturnType<typeof useStyles>;
+
+/** Left-list selection: the page-setup pseudo-item, or a block id. */
+type Selection = { kind: 'page' } | { kind: 'block'; id: string };
+
+const ZOOM_LEVELS: { key: string; label: string; scale: number | 'fit' }[] = [
+  { key: 'fit', label: 'Fit', scale: 'fit' },
+  { key: '75', label: '75%', scale: 0.75 },
+  { key: '100', label: '100%', scale: 1 },
+  { key: 'full', label: 'Full size', scale: 1 },
+];
 
 interface Props {
   templateId: string;
 }
 
-/**
- * M8b — drag-and-drop outcome-letter designer. Author blocks (heading, text,
- * meta grid, outcome, reviewer notes, responses, signature, spacer) in any
- * order; the live preview on the right renders them with placeholder sample
- * data (a template has no single assessment to merge). Layout autosaves to the
- * template's `dnx_letter_template_json` and is consumed at letter-view time by
- * `LetterPreview`.
- */
 export function LetterBuilder({ templateId }: Props) {
   const styles = useStyles();
   const { data: template, isLoading, error } = useTemplate(templateId);
   const { data: levels } = useTemplateLevels(templateId);
-  const allLevelIds = useMemo(
-    () => (levels ?? []).map((l) => l.dnx_assessment_levelid),
-    [levels],
-  );
+  const allLevelIds = useMemo(() => (levels ?? []).map((l) => l.dnx_assessment_levelid), [levels]);
   const { data: criteriaByLevelId } = useCriteriaForLevels(allLevelIds);
   const save = useSaveLetterLayout(templateId);
   const saveBg = useSaveLetterBackground(templateId);
 
   const tree = useMemo(() => buildTree(levels), [levels]);
-  // Flat list of Question levels for the "Insert answer" picker — each with a
-  // Section › Subsection breadcrumb so duplicate names are distinguishable.
   const questionOptions = useMemo(() => flattenQuestions(tree, []), [tree]);
-  // Top-level Sections — the first picker on a "Grouped subsections" block.
   const sectionOptions = useMemo(
     () =>
       tree
@@ -306,16 +448,13 @@ export function LetterBuilder({ templateId }: Props) {
 
   const [layout, setLayout] = useState<LetterLayout | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [pageOpen, setPageOpen] = useState(false);
+  const [selection, setSelection] = useState<Selection>({ kind: 'page' });
   const [bgError, setBgError] = useState<string | null>(null);
-  // Bumped on each successful upload so the background re-downloads even when
-  // the replacement has the same filename (the File column has no timestamp).
   const [bgRefresh, setBgRefresh] = useState(0);
+  const [zoomKey, setZoomKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
 
-  // Seed local layout from the persisted JSON once the template loads. Keyed on
-  // the template id so switching templates re-seeds; DEFAULT_LAYOUT when unset.
   const seededFor = useRef<string | null>(null);
   useEffect(() => {
     if (!template) return;
@@ -329,8 +468,6 @@ export function LetterBuilder({ templateId }: Props) {
     );
   }, [template, templateId]);
 
-  // Debounced autosave whenever the layout changes. The mutate fn is captured
-  // in a ref (written in an effect, not during render) so `commit` stays stable.
   const saveRef = useRef(save.mutate);
   useEffect(() => {
     saveRef.current = save.mutate;
@@ -348,9 +485,6 @@ export function LetterBuilder({ templateId }: Props) {
   }
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
-  // Background image: download the bytes → object URL (File columns aren't
-  // servable by URL — see gotcha AB). Keyed on the filename + a local refresh
-  // counter so a replacement re-downloads even at the same name.
   const backgroundUrl = useLetterBackgroundObjectUrl(
     templateId,
     !!layout?.page?.image,
@@ -375,28 +509,31 @@ export function LetterBuilder({ templateId }: Props) {
   const presentTypes = new Set(layout.blocks.map((b) => b.type));
 
   function addBlock(type: LetterBlockType) {
-    commit({ ...layout!, blocks: [...layout!.blocks, makeBlock(type)] });
+    const b = makeBlock(type);
+    commit({ ...layout!, blocks: [...layout!.blocks, b] });
+    setSelection({ kind: 'block', id: b.id });
   }
   function updateBlock(id: string, patch: Partial<LetterBlock>) {
     commit({
       ...layout!,
-      blocks: layout!.blocks.map((b) =>
-        b.id === id ? ({ ...b, ...patch } as LetterBlock) : b,
-      ),
+      blocks: layout!.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as LetterBlock) : b)),
     });
   }
   function removeBlock(id: string) {
     commit({ ...layout!, blocks: layout!.blocks.filter((b) => b.id !== id) });
+    setSelection({ kind: 'page' });
   }
   function duplicateBlock(id: string) {
     const idx = layout!.blocks.findIndex((b) => b.id === id);
     if (idx < 0) return;
     const src = layout!.blocks[idx];
-    if (SINGLETON_BLOCKS.has(src.type)) return; // can't duplicate a singleton
-    const copy = { ...makeBlock(src.type), ...src, id: makeBlock(src.type).id };
+    if (SINGLETON_BLOCKS.has(src.type)) return;
+    const fresh = makeBlock(src.type);
+    const copy = { ...fresh, ...src, id: fresh.id } as LetterBlock;
     const next = [...layout!.blocks];
-    next.splice(idx + 1, 0, copy as LetterBlock);
+    next.splice(idx + 1, 0, copy);
     commit({ ...layout!, blocks: next });
+    setSelection({ kind: 'block', id: copy.id });
   }
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
@@ -406,14 +543,8 @@ export function LetterBuilder({ templateId }: Props) {
     if (from < 0 || to < 0) return;
     commit({ ...layout!, blocks: arrayMove(layout!.blocks, from, to) });
   }
-  function resetToDefault() {
-    commit({ version: 1, blocks: DEFAULT_LAYOUT.blocks.map((b) => ({ ...b })) });
-  }
-
-  /** Patch page-level letterhead settings, merging into any existing ones. */
   function updatePage(patch: Partial<PageSettings>) {
-    const nextPage = { ...(layout!.page ?? {}), ...patch };
-    commit({ ...layout!, page: nextPage });
+    commit({ ...layout!, page: { ...(layout!.page ?? {}), ...patch } });
   }
 
   async function onPickBackground(file: File | undefined) {
@@ -423,15 +554,12 @@ export function LetterBuilder({ templateId }: Props) {
       setBgError('Please choose an image file.');
       return;
     }
-    // Sanity cap on upload size (File column stores full-fidelity bytes).
     if (file.size > 8 * 1024 * 1024) {
       setBgError('Image is larger than 8 MB — please use a smaller file.');
       return;
     }
     try {
       await saveBg.mutateAsync(file);
-      // Flag the layout so the renderer starts downloading the image, and bump
-      // the refresh counter so a same-name replacement re-downloads.
       updatePage({ image: true });
       setBgRefresh((n) => n + 1);
     } catch (err) {
@@ -440,277 +568,313 @@ export function LetterBuilder({ templateId }: Props) {
   }
 
   const sampleAssessment = makeSampleAssessment(template?.dnx_template_name);
+  const selectedBlock =
+    selection.kind === 'block' ? layout.blocks.find((b) => b.id === selection.id) : undefined;
+
+  const previewEl = (
+    <LetterPreview
+      assessment={sampleAssessment}
+      levels={levels ?? []}
+      responses={[]}
+      criteriaByLevelId={criteriaByLevelId}
+      layout={layout}
+      backgroundUrl={backgroundUrl}
+    />
+  );
+
+  const autosaveText =
+    saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : 'Autosaves as you edit';
 
   return (
     <div className={styles.root}>
-      {/* --- Builder --- */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <span>Letter layout</span>
-          <span className={styles.saveState}>
-            {saveState === 'saving'
-              ? 'Saving…'
-              : saveState === 'saved'
-                ? 'Saved'
-                : 'Autosaves as you edit'}
-          </span>
+      {/* ---- Left: block list ---- */}
+      <div className={`${styles.card} ${styles.stickyPane}`}>
+        <div className={styles.listHead}>
+          <span className={styles.listTitle}>Blocks</span>
+          <span className={styles.listCount}>{layout.blocks.length} blocks</span>
         </div>
 
-        {/* --- Page settings (letterhead): header, footer, background --- */}
-        <div className={styles.pageSettings}>
-          <button
-            type="button"
-            className={styles.pageSettingsToggle}
-            onClick={() => setPageOpen((v) => !v)}
-            aria-expanded={pageOpen}
-          >
-            {pageOpen ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
-            Page settings — header, footer &amp; background
-          </button>
-          {pageOpen && (
-            <div className={styles.pageSettingsBody}>
-              <div className={styles.fieldGroup}>
-                <span className={styles.fieldLabel}>Header (letterhead)</span>
-                <TokenTextEditor
-                  value={layout.page?.header ?? ''}
-                  onChange={(header) => updatePage({ header })}
-                  placeholder="Header — org name, address, logo text… (leave blank for the default brand strip)"
-                  questionOptions={questionOptions}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <div className={styles.list}>
+            {/* Page setup pseudo-row (first, not draggable) */}
+            <div
+              className={`${styles.item} ${selection.kind === 'page' ? styles.itemActive : ''}`}
+              onClick={() => setSelection({ kind: 'page' })}
+            >
+              <span style={{ width: 12, flexShrink: 0 }} />
+              <span className={styles.itemText}>
+                <span className={styles.itemName}>Page setup</span>
+                <span className={styles.itemSub}>Letterhead, footer, background</span>
+              </span>
+            </div>
+
+            <SortableContext items={layout.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              {layout.blocks.map((block) => (
+                <BlockListItem
+                  key={block.id}
+                  block={block}
+                  styles={styles}
+                  active={selection.kind === 'block' && selection.id === block.id}
+                  onSelect={() => setSelection({ kind: 'block', id: block.id })}
                 />
+              ))}
+            </SortableContext>
+          </div>
+        </DndContext>
+
+        <div className={styles.addSection}>
+          <div className={styles.addLabel}>Add block</div>
+          <div className={styles.addBtns}>
+            {(Object.keys(LETTER_BLOCK_LABEL) as LetterBlockType[]).map((t) => {
+              const disabled = SINGLETON_BLOCKS.has(t) && presentTypes.has(t);
+              return (
+                <Button
+                  key={t}
+                  size="small"
+                  appearance="secondary"
+                  className={styles.addBtn}
+                  icon={<Add16Regular />}
+                  disabled={disabled}
+                  onClick={() => addBlock(t)}
+                  title={disabled ? `${LETTER_BLOCK_LABEL[t]} already added` : undefined}
+                >
+                  {LETTER_BLOCK_LABEL[t]}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tips / legend — how to insert values in text blocks */}
+        <div className={styles.tips}>
+          <span className={styles.tipsLabel}>Tips</span>
+          <div className={styles.tipRow}>
+            In any Heading, Text, Signature or the page header/footer, type{' '}
+            <span className={styles.tipKbd}>/</span> to insert a question’s answer.
+          </div>
+          <div className={styles.tipRow}>
+            These <span className={styles.tipKbd}>{'{tokens}'}</span> merge in the assessment’s own
+            details:
+            <div className={styles.tipTokens}>
+              {PLACEHOLDERS.map((p) => (
+                <span key={p} className={styles.tipToken}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Center: config ---- */}
+      <div className={styles.card}>
+        {selection.kind === 'page' ? (
+          <>
+            <div className={styles.cfgHead}>
+              <div>
+                <div className={styles.cfgKicker}>Page</div>
+                <div className={styles.cfgTitle}>Page setup</div>
               </div>
-              <div className={styles.fieldGroup}>
-                <span className={styles.fieldLabel}>Footer</span>
-                <TokenTextEditor
-                  value={layout.page?.footer ?? ''}
-                  onChange={(footer) => updatePage({ footer })}
-                  placeholder="Footer — contact line, disclaimer… (leave blank for the default footer)"
-                  questionOptions={questionOptions}
-                />
+              <span className={styles.autosave}>{autosaveText}</span>
+            </div>
+            <div className={styles.cfgBody}>
+              <PageSetupConfig
+                styles={styles}
+                layout={layout}
+                questionOptions={questionOptions}
+                backgroundUrl={backgroundUrl}
+                backgroundName={template?.dnx_letter_background_name}
+                bgError={bgError}
+                bgUploading={saveBg.isPending}
+                fileInputRef={fileInputRef}
+                onPickBackground={onPickBackground}
+                updatePage={updatePage}
+              />
+            </div>
+          </>
+        ) : selectedBlock ? (
+          <>
+            <div className={styles.cfgHead}>
+              <div>
+                <div className={styles.cfgKicker}>Block</div>
+                <div className={styles.cfgTitle}>{LETTER_BLOCK_LABEL[selectedBlock.type]}</div>
               </div>
-              <div className={styles.fieldGroup}>
-                <span className={styles.fieldLabel}>Background image</span>
-                <div className={styles.bgRow}>
-                  {layout.page?.image && backgroundUrl && (
-                    <img src={backgroundUrl} alt="Letter background" className={styles.bgThumb} />
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className={styles.hiddenFile}
-                    onChange={(e) => {
-                      onPickBackground(e.target.files?.[0]);
-                      e.target.value = ''; // allow re-picking the same file
-                    }}
-                  />
+              <div className={styles.cfgActions}>
+                <span className={styles.autosave}>{autosaveText}</span>
+                {!SINGLETON_BLOCKS.has(selectedBlock.type) && (
                   <Button
                     size="small"
                     appearance="secondary"
-                    icon={<Image16Regular />}
-                    disabled={saveBg.isPending}
-                    onClick={() => fileInputRef.current?.click()}
+                    className={styles.dupBtn}
+                    onClick={() => duplicateBlock(selectedBlock.id)}
                   >
-                    {saveBg.isPending
-                      ? 'Uploading…'
-                      : layout.page?.image
-                        ? 'Replace image'
-                        : 'Upload image'}
+                    Duplicate
                   </Button>
-                  {layout.page?.image && (
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      icon={<Delete16Regular />}
-                      onClick={() => updatePage({ image: false })}
-                      title="Remove background from the letter"
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-                {bgError && (
-                  <span style={{ fontSize: 11, color: 'var(--color-red-text)' }}>{bgError}</span>
                 )}
-                {layout.page?.image && (
-                  <div className={styles.bgControls}>
-                    <div className={styles.bgControlRow}>
-                      <label className={styles.bgControlLabel}>
-                        Fit
-                        <Dropdown
-                          size="small"
-                          value={bgModeLabel(layout.page?.backgroundMode ?? 'contain')}
-                          selectedOptions={[layout.page?.backgroundMode ?? 'contain']}
-                          onOptionSelect={(_, d) =>
-                            updatePage({
-                              backgroundMode: (d.optionValue as BackgroundMode) ?? 'contain',
-                            })
-                          }
-                          style={{ minWidth: 110 }}
-                        >
-                          <Option value="contain" text="Fit">Fit (whole image)</Option>
-                          <Option value="cover" text="Cover">Cover (fill &amp; crop)</Option>
-                          <Option value="tile" text="Tile">Tile</Option>
-                        </Dropdown>
-                      </label>
-                      <label className={styles.bgControlLabel}>
-                        Opacity
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={Math.round((layout.page?.backgroundOpacity ?? 0.15) * 100)}
-                          onChange={(e) =>
-                            updatePage({ backgroundOpacity: Number(e.target.value) / 100 })
-                          }
-                        />
-                        <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 30 }}>
-                          {Math.round((layout.page?.backgroundOpacity ?? 0.15) * 100)}%
-                        </span>
-                      </label>
-                    </div>
-                    {/* Scale + position only matter when the image isn't tiled. */}
-                    {layout.page?.backgroundMode !== 'tile' && (
-                      <div className={styles.bgControlRow}>
-                        <label className={styles.bgControlLabel}>
-                          Size
-                          <input
-                            type="range"
-                            min={10}
-                            max={100}
-                            value={Math.round((layout.page?.backgroundScale ?? 1) * 100)}
-                            onChange={(e) =>
-                              updatePage({ backgroundScale: Number(e.target.value) / 100 })
-                            }
-                          />
-                          <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 30 }}>
-                            {Math.round((layout.page?.backgroundScale ?? 1) * 100)}%
-                          </span>
-                        </label>
-                        <label className={styles.bgControlLabel}>
-                          Position
-                          <div
-                            className={styles.posGrid}
-                            role="radiogroup"
-                            aria-label="Background position"
-                          >
-                            {BACKGROUND_POSITIONS.map((p) => {
-                              const active = (layout.page?.backgroundPosition ?? 'center') === p;
-                              return (
-                                <button
-                                  key={p}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={active}
-                                  aria-label={p.replace('-', ' ')}
-                                  title={p.replace('-', ' ')}
-                                  className={`${styles.posCell} ${active ? styles.posCellActive : ''}`}
-                                  onClick={() => updatePage({ backgroundPosition: p })}
-                                />
-                              );
-                            })}
-                          </div>
-                        </label>
-                      </div>
-                    )}
-                    {/* Bleed only applies to Fit — Cover is already full-bleed,
-                        Tile always covers the page. */}
-                    {(layout.page?.backgroundMode ?? 'contain') === 'contain' && (
-                      <Checkbox
-                        label="Bleed to page edge (ignore margins)"
-                        checked={layout.page?.backgroundBleed ?? false}
-                        onChange={(_, d) => updatePage({ backgroundBleed: !!d.checked })}
-                      />
-                    )}
-                  </div>
-                )}
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  className={styles.delBtn}
+                  onClick={() => removeBlock(selectedBlock.id)}
+                >
+                  Delete
+                </Button>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className={styles.palette}>
-          {(Object.keys(LETTER_BLOCK_LABEL) as LetterBlockType[]).map((t) => {
-            const disabled = SINGLETON_BLOCKS.has(t) && presentTypes.has(t);
-            return (
-              <Button
-                key={t}
-                size="small"
-                appearance="secondary"
-                icon={<Add16Regular />}
-                disabled={disabled}
-                onClick={() => addBlock(t)}
-                title={disabled ? `${LETTER_BLOCK_LABEL[t]} already added` : undefined}
-              >
-                {LETTER_BLOCK_LABEL[t]}
-              </Button>
-            );
-          })}
-          <Tooltip content="Reset to the default layout" relationship="label">
-            <Button
-              size="small"
-              appearance="subtle"
-              icon={<ArrowCounterclockwise16Regular />}
-              onClick={resetToDefault}
-              style={{ marginLeft: 'auto' }}
-            >
-              Reset
-            </Button>
-          </Tooltip>
-        </div>
-
-        {layout.blocks.length === 0 ? (
-          <div className={styles.empty}>
-            No blocks yet. Add one from the palette above to start building the letter.
-          </div>
+            <div className={styles.cfgBody}>
+              <BlockConfig
+                block={selectedBlock}
+                styles={styles}
+                questionOptions={questionOptions}
+                tree={tree}
+                sectionOptions={sectionOptions}
+                onChange={(patch) => updateBlock(selectedBlock.id, patch)}
+              />
+            </div>
+          </>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={layout.blocks.map((b) => b.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className={styles.blockList}>
-                {layout.blocks.map((block) => (
-                  <BlockEditor
-                    key={block.id}
-                    block={block}
-                    styles={styles}
-                    questionOptions={questionOptions}
-                    tree={tree}
-                    sectionOptions={sectionOptions}
-                    onChange={(patch) => updateBlock(block.id, patch)}
-                    onRemove={() => removeBlock(block.id)}
-                    onDuplicate={() => duplicateBlock(block.id)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <div className={styles.empty}>Select a block on the left to configure it.</div>
         )}
       </div>
 
-      {/* --- Live preview (placeholder sample data) --- */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <span>Preview</span>
-          <span className={styles.saveState}>Sample data</span>
+      {/* ---- Right: preview ---- */}
+      <div className={`${styles.card} ${styles.stickyPane}`}>
+        <div className={styles.pvHead}>
+          <span className={styles.pvTitle}>Preview</span>
+          <span className={styles.pvMeta}>A4 · sample data</span>
+          <span className={styles.zoomGroup}>
+            {ZOOM_LEVELS.map((z) => (
+              <button
+                key={z.key}
+                type="button"
+                className={styles.zoomBtn}
+                onClick={() => setZoomKey(z.key)}
+              >
+                {z.label}
+              </button>
+            ))}
+          </span>
         </div>
-        <div className={styles.previewWrap}>
-          <LetterPreview
-            assessment={sampleAssessment}
-            levels={levels ?? []}
-            responses={[]}
-            criteriaByLevelId={criteriaByLevelId}
-            layout={layout}
-            backgroundUrl={backgroundUrl}
-          />
+        <div className={styles.pvBody}>
+          {/* Inline preview scaled to fit the panel width (~430px / 740px). */}
+          <div className={styles.pvScale} style={{ transform: 'scale(0.58)', height: 'calc(1047px * 0.58)' }}>
+            {previewEl}
+          </div>
         </div>
       </div>
+
+      {/* ---- Zoom modal ---- */}
+      <ZoomModal
+        styles={styles}
+        zoomKey={zoomKey}
+        onClose={() => setZoomKey(null)}
+        preview={previewEl}
+      />
     </div>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Per-block editor                                                            */
+/* Zoom modal                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function ZoomModal({
+  styles,
+  zoomKey,
+  onClose,
+  preview,
+}: {
+  styles: Styles;
+  zoomKey: string | null;
+  onClose: () => void;
+  preview: React.ReactNode;
+}) {
+  const z = ZOOM_LEVELS.find((x) => x.key === zoomKey);
+  const open = !!z;
+  // Fit: scale the 740px page down to a comfortable width. Others: the numeric %.
+  const scale = !z ? 1 : z.scale === 'fit' ? 0.9 : z.scale;
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface className={styles.zoomSurface}>
+        <div className={styles.zoomHead}>
+          <span className={styles.pvTitle}>Letter preview — {z?.label ?? ''}</span>
+          <Button
+            appearance="subtle"
+            className={styles.closeBtn}
+            icon={<Dismiss20Regular />}
+            onClick={onClose}
+            aria-label="Close"
+          />
+        </div>
+        <div className={styles.zoomBody}>
+          {/* Reserve the SCALED footprint (740px page × scale) and center it, so
+              the shrunk page sits in the middle rather than hugging top-left. */}
+          <div style={{ width: `calc(740px * ${scale})`, margin: '0 auto' }}>
+            <div
+              className={styles.pvScale}
+              style={{ transform: `scale(${scale})`, height: `calc(1047px * ${scale})` }}
+            >
+              {preview}
+            </div>
+          </div>
+        </div>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Left-list item (draggable)                                                  */
+/* -------------------------------------------------------------------------- */
+
+function BlockListItem({
+  block,
+  styles,
+  active,
+  onSelect,
+}: {
+  block: LetterBlock;
+  styles: Styles;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+  const blank =
+    block.type === 'groupedSubsections' && (!block.sectionLevelId || !block.groupByQuestionName);
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${styles.item} ${active ? styles.itemActive : ''}`}
+      onClick={onSelect}
+    >
+      <span
+        className={`${styles.grip} blk-grip`}
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ReOrderDotsVertical24Regular />
+      </span>
+      <span className={styles.itemText}>
+        <span className={styles.itemName}>{LETTER_BLOCK_LABEL[block.type]}</span>
+        <span className={styles.itemSub}>{blockSubtitle(block)}</span>
+      </span>
+      {blank && <span className={styles.blankTag}>BLANK</span>}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Per-block config body                                                       */
 /* -------------------------------------------------------------------------- */
 
 interface QuestionOption {
@@ -718,82 +882,33 @@ interface QuestionOption {
   label: string;
   path: string;
 }
-
 interface SectionOption {
   levelId: string;
   name: string;
 }
 
-interface BlockEditorProps {
-  block: LetterBlock;
-  styles: ReturnType<typeof useStyles>;
-  questionOptions: QuestionOption[];
-  tree: LevelNode[];
-  sectionOptions: SectionOption[];
-  onChange: (patch: Partial<LetterBlock>) => void;
-  onRemove: () => void;
-  onDuplicate: () => void;
-}
-
-function BlockEditor({
+function BlockConfig({
   block,
   styles,
   questionOptions,
   tree,
   sectionOptions,
   onChange,
-  onRemove,
-  onDuplicate,
-}: BlockEditorProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: block.id });
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
-  const canDuplicate = !SINGLETON_BLOCKS.has(block.type);
-  // Imperative handle for the token editor so "Insert answer" drops a chip at
-  // the caret. Held in a ref so the picker and the editor share one instance.
-  const editorHandle = useRef<{ insertToken: (id: string, name: string) => void } | null>(
-    null,
-  );
+}: {
+  block: LetterBlock;
+  styles: Styles;
+  questionOptions: QuestionOption[];
+  tree: LevelNode[];
+  sectionOptions: SectionOption[];
+  onChange: (patch: Partial<LetterBlock>) => void;
+}) {
+  const editorHandle = useRef<{ insertToken: (id: string, name: string) => void } | null>(null);
 
-  return (
-    <div ref={setNodeRef} style={style} className={styles.blockCard}>
-      <div className={styles.blockTop}>
-        <span className={styles.grip} {...attributes} {...listeners} aria-label="Drag to reorder">
-          <ReOrderDotsVertical24Regular />
-        </span>
-        <span className={styles.blockType}>{LETTER_BLOCK_LABEL[block.type]}</span>
-        {canDuplicate && (
-          <Button
-            size="small"
-            appearance="subtle"
-            className={styles.iconBtn}
-            icon={<Copy16Regular />}
-            onClick={onDuplicate}
-            title="Duplicate"
-          />
-        )}
-        <Button
-          size="small"
-          appearance="subtle"
-          className={styles.iconBtn}
-          icon={<Delete16Regular />}
-          onClick={onRemove}
-          title="Remove"
-        />
-      </div>
-      <div className={styles.blockBody}>{renderBody()}</div>
-    </div>
-  );
-
-  function renderBody() {
-    switch (block.type) {
-      case 'heading':
-        return (
-          <>
+  switch (block.type) {
+    case 'heading':
+      return (
+        <>
+          <div className={styles.fieldGroup}>
             <TokenTextEditor
               value={block.text}
               onChange={(text) => onChange({ text })}
@@ -802,191 +917,393 @@ function BlockEditor({
               handleRef={(h) => (editorHandle.current = h)}
               questionOptions={questionOptions}
             />
-            <div className={styles.alignRow}>
+            <div className={styles.alignRow} style={{ marginTop: 12 }}>
               {(['left', 'center', 'right'] as TextAlign[]).map((a) => (
                 <Button
                   key={a}
                   size="small"
-                  appearance="subtle"
-                  className={`${styles.iconBtn} ${block.align === a ? styles.alignBtnActive : ''}`}
+                  appearance="secondary"
+                  className={`${styles.alignBtn} ${block.align === a ? styles.alignBtnActive : ''}`}
                   icon={
-                    a === 'left' ? (
-                      <TextAlignLeft16Regular />
-                    ) : a === 'center' ? (
-                      <TextAlignCenter16Regular />
-                    ) : (
-                      <TextAlignRight16Regular />
-                    )
+                    a === 'left' ? <TextAlignLeft16Regular /> : a === 'center' ? <TextAlignCenter16Regular /> : <TextAlignRight16Regular />
                   }
                   onClick={() => onChange({ align: a })}
                   title={`Align ${a}`}
                 />
               ))}
             </div>
-            <InsertAnswer
-              styles={styles}
-              questionOptions={questionOptions}
-              onInsert={(levelId, name) => editorHandle.current?.insertToken(levelId, name)}
-            />
-            <PlaceholderHint styles={styles} />
-          </>
-        );
-      case 'text':
-      case 'signature':
-        return (
-          <>
+          </div>
+          <InsertValues styles={styles} questionOptions={questionOptions} onInsert={(id, name) => editorHandle.current?.insertToken(id, name)} />
+        </>
+      );
+    case 'text':
+    case 'signature':
+      return (
+        <>
+          <div className={styles.fieldGroup}>
             <TokenTextEditor
               value={block.text}
               onChange={(text) => onChange({ text })}
-              placeholder={
-                block.type === 'signature' ? 'Signature / issuer line' : 'Paragraph text'
-              }
+              placeholder={block.type === 'signature' ? 'Signature / issuer line' : 'Paragraph text'}
               handleRef={(h) => (editorHandle.current = h)}
               questionOptions={questionOptions}
             />
-            <InsertAnswer
-              styles={styles}
-              questionOptions={questionOptions}
-              onInsert={(levelId, name) => editorHandle.current?.insertToken(levelId, name)}
-            />
-            <PlaceholderHint styles={styles} />
-          </>
-        );
-      case 'meta':
-        return (
-          <div className={styles.metaGrid}>
-            {(Object.keys(META_FIELD_LABEL) as MetaFieldKey[]).map((f) => (
-              <Checkbox
-                key={f}
-                label={META_FIELD_LABEL[f]}
-                checked={block.fields.includes(f)}
-                onChange={(_, d) => {
-                  const next = d.checked
-                    ? [...block.fields, f]
-                    : block.fields.filter((x) => x !== f);
-                  onChange({ fields: next });
-                }}
-              />
-            ))}
           </div>
-        );
-      case 'spacer':
-        return (
+          <InsertValues styles={styles} questionOptions={questionOptions} onInsert={(id, name) => editorHandle.current?.insertToken(id, name)} />
+        </>
+      );
+    case 'meta':
+      return (
+        <div className={styles.fieldGroup}>
+          <div className={styles.fieldLabel}>Fields to show</div>
+          <div className={styles.metaGrid}>
+            {(Object.keys(META_FIELD_LABEL) as MetaFieldKey[]).map((f) => {
+              const on = block.fields.includes(f);
+              return (
+                <label key={f} className={`${styles.metaCell} ${on ? styles.metaCellOn : ''}`}>
+                  <Checkbox
+                    checked={on}
+                    onChange={(_, d) =>
+                      onChange({
+                        fields: d.checked ? [...block.fields, f] : block.fields.filter((x) => x !== f),
+                      })
+                    }
+                  />
+                  {META_FIELD_LABEL[f]}
+                </label>
+              );
+            })}
+          </div>
+          <div className={styles.hint} style={{ marginTop: 12 }}>
+            {block.fields.length} of {Object.keys(META_FIELD_LABEL).length} shown · unticked fields are
+            left out of the letter entirely.
+          </div>
+        </div>
+      );
+    case 'spacer':
+      return (
+        <div className={styles.fieldGroup}>
+          <div className={styles.fieldLabel}>Height</div>
           <Input
+            className={styles.input}
             type="number"
             value={String(block.size)}
             onChange={(_, d) => onChange({ size: Math.max(0, Number(d.value) || 0) })}
-            contentAfter={<span style={{ fontSize: 11 }}>px</span>}
+            contentAfter={<span style={{ fontSize: 12 }}>px</span>}
           />
-        );
-      case 'outcome':
-        return <div className={styles.fixedNote}>Renders the pass/fail outcome block.</div>;
-      case 'reviewerNotes':
-        return (
-          <div className={styles.fixedNote}>
-            Renders the reviewer's notes (hidden when there are none).
-          </div>
-        );
-      case 'responses':
-        return (
-          <div className={styles.fixedNote}>
-            Renders every question flagged “Include in outcome letter”, grouped by section.
-          </div>
-        );
-      case 'groupedSubsections': {
-        const chosenSection = tree.find(
-          (n) => n.level.dnx_assessment_levelid === block.sectionLevelId,
-        );
-        const questionNames = chosenSection
-          ? subsectionQuestionNames([chosenSection])
-          : [];
-        return (
-          <>
+        </div>
+      );
+    case 'outcome':
+      return (
+        <NoSettings styles={styles} text="Renders the pass/fail outcome block, styled from the template." />
+      );
+    case 'reviewerNotes':
+      return (
+        <NoSettings styles={styles} text="Renders the reviewer's notes. Hidden entirely when there are none." />
+      );
+    case 'responses':
+      return (
+        <NoSettings
+          styles={styles}
+          text="Renders every question marked “Include in outcome letter”, grouped by section."
+        />
+      );
+    case 'groupedSubsections': {
+      const chosenSection = tree.find((n) => n.level.dnx_assessment_levelid === block.sectionLevelId);
+      const questionNames = chosenSection ? subsectionQuestionNames([chosenSection]) : [];
+      return (
+        <>
+          <div className={styles.fieldGroup}>
+            <div className={styles.fieldLabel}>Block title</div>
             <Input
+              className={styles.input}
               value={block.heading}
               onChange={(_, d) => onChange({ heading: d.value })}
-              placeholder="Heading (optional)"
+              placeholder="Grouped subsections"
             />
-            <Dropdown
-              value={chosenSection?.level.dnx_name ?? ''}
-              selectedOptions={block.sectionLevelId ? [block.sectionLevelId] : []}
-              onOptionSelect={(_, d) =>
-                // Changing the section invalidates the previous question choice
-                // — it belonged to the old section's subsections.
-                onChange({ sectionLevelId: d.optionValue ?? '', groupByQuestionName: '' })
-              }
-              placeholder="Which section…"
-            >
-              {sectionOptions.map((s) => (
-                <Option key={s.levelId} value={s.levelId} text={s.name}>
-                  {s.name}
-                </Option>
-              ))}
-            </Dropdown>
-            <Dropdown
-              value={block.groupByQuestionName || ''}
-              selectedOptions={block.groupByQuestionName ? [block.groupByQuestionName] : []}
-              onOptionSelect={(_, d) =>
-                onChange({ groupByQuestionName: d.optionValue ?? '' })
-              }
-              placeholder="Group its subsections by which question…"
-              disabled={!chosenSection}
-            >
-              {questionNames.map((name) => (
-                <Option key={name} value={name} text={name}>
-                  {name}
-                </Option>
-              ))}
-            </Dropdown>
-            <div className={styles.fixedNote}>
-              Groups the chosen section’s subsections by their answer to the picked
-              question, and lists each subsection’s letter fields under its group.
-              {chosenSection && questionNames.length === 0 &&
-                ' (No subsection questions found in this section.)'}
-              {' '}This block only shows content on a real, answered assessment —
-              the preview here has no answers, so it renders blank.
+          </div>
+          <div className={styles.twoCol}>
+            <div className={styles.fieldGroup}>
+              <div className={styles.fieldLabel}>Section to list</div>
+              <Dropdown
+                value={chosenSection?.level.dnx_name ?? ''}
+                selectedOptions={block.sectionLevelId ? [block.sectionLevelId] : []}
+                onOptionSelect={(_, d) => onChange({ sectionLevelId: d.optionValue ?? '', groupByQuestionName: '' })}
+                placeholder="Which section…"
+              >
+                {sectionOptions.map((sopt) => (
+                  <Option key={sopt.levelId} value={sopt.levelId} text={sopt.name}>
+                    {sopt.name}
+                  </Option>
+                ))}
+              </Dropdown>
             </div>
-          </>
-        );
-      }
+            <div className={styles.fieldGroup}>
+              <div className={styles.fieldLabel}>Group by answer to</div>
+              <Dropdown
+                value={block.groupByQuestionName || ''}
+                selectedOptions={block.groupByQuestionName ? [block.groupByQuestionName] : []}
+                onOptionSelect={(_, d) => onChange({ groupByQuestionName: d.optionValue ?? '' })}
+                placeholder="Which question…"
+                disabled={!chosenSection}
+              >
+                {questionNames.map((name) => (
+                  <Option key={name} value={name} text={name}>
+                    {name}
+                  </Option>
+                ))}
+              </Dropdown>
+            </div>
+          </div>
+          <div className={styles.amberNote}>
+            <div className={styles.amberNoteTitle}>Blank in preview — by design</div>
+            Groups {chosenSection?.level.dnx_name ?? 'the chosen section'}'s subsections by their answer
+            to {block.groupByQuestionName || 'the picked question'}. The preview has no answers, so this
+            block renders empty until a real assessment is signed off.
+            {chosenSection && questionNames.length === 0 && ' (No subsection questions found in this section.)'}
+          </div>
+        </>
+      );
     }
   }
 }
 
-function bgModeLabel(mode: BackgroundMode): string {
-  return mode === 'cover' ? 'Cover' : mode === 'contain' ? 'Fit' : 'Tile';
-}
-
-function PlaceholderHint({ styles }: { styles: ReturnType<typeof useStyles> }) {
+function NoSettings({ styles, text }: { styles: Styles; text: string }) {
   return (
-    <div className={styles.placeholderHint}>
-      Placeholders: {PLACEHOLDERS.join(' ')}
+    <div className={styles.noSettings}>
+      <div className={styles.noSettingsTitle}>No settings</div>
+      <div className={styles.noSettingsSub}>{text}</div>
     </div>
   );
 }
 
 /**
- * "Insert answer" picker — a search-as-you-type list of the template's
- * questions. Selecting one appends its answer token to the block's text so the
- * candidate's answer to that question renders inline at letter time. Clears its
- * own selection after each insert so it reads as an action, not a bound value.
+ * Insert-value chips — grey placeholder tokens + purple answer tokens. Clicking
+ * a chip drops that token at the caret of the block's rich-text editor.
  */
+function InsertValues({
+  styles,
+  questionOptions,
+  onInsert,
+}: {
+  styles: Styles;
+  questionOptions: QuestionOption[];
+  onInsert: (levelId: string, name: string) => void;
+}) {
+  return (
+    <div className={styles.fieldGroup}>
+      <div className={styles.insertLabel}>Insert a value</div>
+      <InsertAnswer styles={styles} questionOptions={questionOptions} onInsert={onInsert} />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page setup config                                                           */
+/* -------------------------------------------------------------------------- */
+
+function bgModeLabel(mode: BackgroundMode): string {
+  return mode === 'cover' ? 'Fill' : mode === 'contain' ? 'Fit' : 'Tile';
+}
+
+function PageSetupConfig({
+  styles,
+  layout,
+  questionOptions,
+  backgroundUrl,
+  backgroundName,
+  bgError,
+  bgUploading,
+  fileInputRef,
+  onPickBackground,
+  updatePage,
+}: {
+  styles: Styles;
+  layout: LetterLayout;
+  questionOptions: QuestionOption[];
+  backgroundUrl?: string;
+  backgroundName?: string;
+  bgError: string | null;
+  bgUploading: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPickBackground: (file: File | undefined) => void;
+  updatePage: (patch: Partial<PageSettings>) => void;
+}) {
+  const page = layout.page ?? {};
+  const mode = page.backgroundMode ?? 'contain';
+  return (
+    <>
+      <div className={styles.twoCol}>
+        <div className={styles.fieldGroup}>
+          <div className={styles.fieldLabel}>Header (letterhead)</div>
+          <TokenTextEditor
+            value={page.header ?? ''}
+            onChange={(header) => updatePage({ header })}
+            placeholder="Org name, address…"
+            questionOptions={questionOptions}
+          />
+        </div>
+        <div className={styles.fieldGroup}>
+          <div className={styles.fieldLabel}>Footer</div>
+          <TokenTextEditor
+            value={page.footer ?? ''}
+            onChange={(footer) => updatePage({ footer })}
+            placeholder="Contact line, disclaimer…"
+            questionOptions={questionOptions}
+          />
+        </div>
+      </div>
+
+      <div className={styles.fieldGroup}>
+        <div className={styles.fieldLabel}>Background image</div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className={styles.hiddenFile}
+          onChange={(e) => {
+            onPickBackground(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        {page.image && backgroundUrl ? (
+          <div className={styles.bgRow}>
+            <img src={backgroundUrl} alt="Letter background" className={styles.bgThumb} />
+            <div className={styles.bgFileInfo}>
+              <span className={styles.bgFileName}>{backgroundName ?? 'background.png'}</span>
+              <span className={styles.bgFileMeta}>Image background</span>
+            </div>
+            <Button size="small" appearance="secondary" className={styles.dupBtn} disabled={bgUploading} onClick={() => fileInputRef.current?.click()}>
+              {bgUploading ? 'Uploading…' : 'Replace'}
+            </Button>
+            <Button size="small" appearance="subtle" className={styles.delBtn} onClick={() => updatePage({ image: false })}>
+              Remove
+            </Button>
+          </div>
+        ) : (
+          <Button
+            appearance="secondary"
+            className={styles.dupBtn}
+            icon={<Image16Regular />}
+            disabled={bgUploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {bgUploading ? 'Uploading…' : 'Upload image'}
+          </Button>
+        )}
+        {bgError && <span style={{ fontSize: 12, color: 'var(--ds-not-suitable, #EF4444)', marginTop: 6 }}>{bgError}</span>}
+      </div>
+
+      {page.image && (
+        <>
+          <div className={styles.twoCol}>
+            <div className={styles.sliderRow}>
+              <div className={styles.sliderTop}>
+                <span className={styles.fieldLabel} style={{ marginBottom: 0 }}>Opacity</span>
+                <span className={styles.bgFileMeta}>{Math.round((page.backgroundOpacity ?? 0.15) * 100)}%</span>
+              </div>
+              <input
+                className={styles.slider}
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round((page.backgroundOpacity ?? 0.15) * 100)}
+                onChange={(e) => updatePage({ backgroundOpacity: Number(e.target.value) / 100 })}
+              />
+            </div>
+            <div className={styles.sliderRow}>
+              <div className={styles.sliderTop}>
+                <span className={styles.fieldLabel} style={{ marginBottom: 0 }}>Size</span>
+                <span className={styles.bgFileMeta}>{Math.round((page.backgroundScale ?? 1) * 100)}%</span>
+              </div>
+              <input
+                className={styles.slider}
+                type="range"
+                min={10}
+                max={100}
+                disabled={mode === 'tile'}
+                value={Math.round((page.backgroundScale ?? 1) * 100)}
+                onChange={(e) => updatePage({ backgroundScale: Number(e.target.value) / 100 })}
+              />
+            </div>
+          </div>
+
+          <div className={styles.twoCol}>
+            <div className={styles.fieldGroup}>
+              <div className={styles.fieldLabel}>Fit</div>
+              <div className={styles.fitRow}>
+                {(['contain', 'cover', 'tile'] as BackgroundMode[]).map((m) => (
+                  <Button
+                    key={m}
+                    size="small"
+                    appearance="secondary"
+                    className={`${styles.alignBtn} ${mode === m ? styles.alignBtnActive : ''}`}
+                    onClick={() => updatePage({ backgroundMode: m })}
+                  >
+                    {bgModeLabel(m)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {mode !== 'tile' && (
+              <div className={styles.fieldGroup}>
+                <div className={styles.fieldLabel}>Position</div>
+                <div className={styles.posGrid} role="radiogroup" aria-label="Background position">
+                  {BACKGROUND_POSITIONS.map((p) => {
+                    const active = (page.backgroundPosition ?? 'center') === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={p.replace('-', ' ')}
+                        title={p.replace('-', ' ')}
+                        className={`${styles.posCell} ${active ? styles.posCellActive : ''}`}
+                        onClick={() => updatePage({ backgroundPosition: p })}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {mode === 'contain' && (
+            <Checkbox
+              label="Bleed to page edge"
+              checked={page.backgroundBleed ?? false}
+              onChange={(_, d) => updatePage({ backgroundBleed: !!d.checked })}
+            />
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Insert-answer picker + helpers                                              */
+/* -------------------------------------------------------------------------- */
+
 function InsertAnswer({
   styles,
   questionOptions,
   onInsert,
 }: {
-  styles: ReturnType<typeof useStyles>;
+  styles: Styles;
   questionOptions: QuestionOption[];
   onInsert: (levelId: string, name: string) => void;
 }) {
-  if (questionOptions.length === 0) return null;
+  if (questionOptions.length === 0) {
+    return <div className={styles.hint}>Add questions in the Structure tab to insert their answers here.</div>;
+  }
   return (
     <Combobox
-      className={styles.insertAnswer}
       placeholder="+ Insert answer…"
       selectedOptions={[]}
       value=""
+      style={{ width: '100%' }}
       onOptionSelect={(_, d) => {
         const q = questionOptions.find((o) => o.levelId === d.optionValue);
         if (q) onInsert(q.levelId, q.label);
@@ -1001,10 +1318,6 @@ function InsertAnswer({
   );
 }
 
-/** Flatten the level tree to Question rows with a breadcrumb path. */
-/** Distinct names of Question levels that sit inside a Subsection — the
- *  candidates for the reason-grouping question (matched by name across the
- *  sibling qualification subsections). */
 function subsectionQuestionNames(tree: LevelNode[]): string[] {
   const names = new Set<string>();
   const walk = (node: LevelNode, inSubsection: boolean) => {
@@ -1033,23 +1346,17 @@ function flattenQuestions(nodes: LevelNode[], prefix: string[]): QuestionOption[
   return out;
 }
 
-/**
- * A throwaway assessment object for the preview. Only the fields LetterPreview
- * reads matter; lookups are faked via the OData annotation keys `lookupName`
- * expects. Outcome is left Pending so the preview shows the neutral block.
- */
 function makeSampleAssessment(templateName?: string): Dnx_assessment_instances {
   const rec: Record<string, unknown> = {
     dnx_assessment_instanceid: 'sample',
     dnx_assessment_name: 'Sample assessment',
     dnx_version: 1,
-    dnx_outcome: 2, // Pending
+    dnx_outcome: 2,
     dnx_outcome_notes: 'Sample reviewer notes appear here when present.',
     dnx_submittedon: new Date().toISOString().slice(0, 10),
     '_ownerid_value@OData.Community.Display.V1.FormattedValue': 'Jane Candidate',
     '_dnx_project_value@OData.Community.Display.V1.FormattedValue': 'Sample project',
-    '_dnx_assessmenttemplate_value@OData.Community.Display.V1.FormattedValue':
-      templateName ?? 'Sample template',
+    '_dnx_assessmenttemplate_value@OData.Community.Display.V1.FormattedValue': templateName ?? 'Sample template',
   };
   return rec as unknown as Dnx_assessment_instances;
 }

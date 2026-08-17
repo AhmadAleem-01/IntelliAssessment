@@ -6,7 +6,7 @@ import {
   MessageBarBody,
   makeStyles,
 } from '@fluentui/react-components';
-import { Add16Regular } from '@fluentui/react-icons';
+import { Add16Regular, ArrowMinimize16Regular, ArrowMaximize16Regular } from '@fluentui/react-icons';
 import {
   DndContext,
   PointerSensor,
@@ -37,42 +37,56 @@ import { LEVEL_TYPE_CODE, type LevelType } from './levelTypes';
 
 const useStyles = makeStyles({
   card: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
     overflow: 'hidden',
   },
   cardHeader: {
-    padding: '14px 18px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    padding: '18px 20px',
+    borderBottom: '1px solid var(--ds-border)',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '12px',
   },
   cardHeaderTitle: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-h2)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
   },
   cardHeaderSub: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
-    marginTop: '2px',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    marginTop: '3px',
+  },
+  headerActions: { display: 'flex', gap: '8px', flexShrink: 0 },
+  collapseBtn: {
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-body)',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)', color: 'var(--ds-text-strong)' },
+  },
+  addBtn: {
+    backgroundColor: 'var(--ds-ai-surface, #F5F3FF)',
+    border: '1px solid var(--ds-ai-border, #ddd6fe)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
+    fontWeight: 600,
+    ':hover': { backgroundColor: '#ece7fe', color: 'var(--ds-ai-primary, #8B5CF6)' },
   },
   cardBody: {
-    padding: '18px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
     minHeight: '120px',
   },
+  cardBodyPad: { padding: '18px' },
   empty: {
+    margin: '18px',
     padding: '40px 20px',
     textAlign: 'center',
-    color: 'var(--color-text-secondary)',
-    fontSize: '13px',
-    border: '0.5px dashed var(--color-border-tertiary)',
+    color: 'var(--ds-text-muted)',
+    fontSize: 'var(--ds-fs-body)',
+    border: '1px dashed var(--ds-border)',
     borderRadius: 'var(--border-radius-md)',
     display: 'flex',
     flexDirection: 'column',
@@ -80,9 +94,9 @@ const useStyles = makeStyles({
     gap: '10px',
   },
   emptyTitle: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
   },
 });
 
@@ -109,6 +123,19 @@ export function LevelTree({ templateId }: Props) {
   const duplicate = useDuplicateLevel(templateId);
   const move = useMoveLevel(templateId);
   const [dialog, setDialog] = useState<DialogState>({ kind: 'closed' });
+  // Collapse/expand-all toggle. `foldSignal` is bumped on each click; nodes
+  // watch it and apply `foldTo` (render-time adjust-on-change, not an effect;
+  // see LevelTreeNode). `allCollapsed` flips the button label + next action.
+  const [foldSignal, setFoldSignal] = useState(0);
+  const [foldTo, setFoldTo] = useState<'expanded' | 'collapsed'>('expanded');
+  const [allCollapsed, setAllCollapsed] = useState(false);
+
+  function toggleFoldAll() {
+    const next = allCollapsed ? 'expanded' : 'collapsed';
+    setFoldTo(next);
+    setFoldSignal((v) => v + 1);
+    setAllCollapsed(!allCollapsed);
+  }
 
   // Pointer sensor with a tiny drag distance so quick clicks still register
   // as buttons (Edit / Delete / chevron) rather than starting a drag.
@@ -118,6 +145,17 @@ export function LevelTree({ templateId }: Props) {
   );
 
   const tree = buildTree(levels);
+
+  // Live structure counts for the header subtitle (sections/subsections/questions).
+  let sectionCount = 0;
+  let subsectionCount = 0;
+  let questionCount = 0;
+  for (const l of levels ?? []) {
+    const t = l.dnx_assessment_level_type;
+    if (t === 1) sectionCount += 1;
+    else if (t === 2) subsectionCount += 1;
+    else if (t === 3) questionCount += 1;
+  }
 
   function openAddSection() {
     setDialog({
@@ -227,16 +265,40 @@ export function LevelTree({ templateId }: Props) {
         <div>
           <div className={styles.cardHeaderTitle}>Structure</div>
           <div className={styles.cardHeaderSub}>
-            Sections, subsections, and questions for this template. Drag the handle
-            on the left of any row to reorder.
+            {sectionCount} section{sectionCount === 1 ? '' : 's'} · {subsectionCount} subsection
+            {subsectionCount === 1 ? '' : 's'} · {questionCount} question
+            {questionCount === 1 ? '' : 's'}
           </div>
         </div>
-        <Button appearance="primary" icon={<Add16Regular />} onClick={openAddSection}>
-          Add section
-        </Button>
+        <div className={styles.headerActions}>
+          {tree.length > 0 && (
+            <Button
+              appearance="secondary"
+              className={styles.collapseBtn}
+              icon={allCollapsed ? <ArrowMaximize16Regular /> : <ArrowMinimize16Regular />}
+              onClick={toggleFoldAll}
+            >
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
+            </Button>
+          )}
+          <Button
+            appearance="secondary"
+            className={styles.addBtn}
+            icon={<Add16Regular />}
+            onClick={openAddSection}
+          >
+            Add section
+          </Button>
+        </div>
       </div>
 
-      <div className={styles.cardBody}>
+      <div
+        className={`${styles.cardBody} ${
+          isLoading || error || reorder.error || duplicate.error || move.error || tree.length === 0
+            ? styles.cardBodyPad
+            : ''
+        }`}
+      >
         {isLoading && <Spinner label="Loading structure..." size="tiny" />}
 
         {error && (
@@ -301,6 +363,8 @@ export function LevelTree({ templateId }: Props) {
                   onDelete={(n) => setDialog({ kind: 'delete', node: n })}
                   onDuplicate={handleDuplicate}
                   duplicatingId={duplicate.isPending ? '*' : null}
+                  foldSignal={foldSignal}
+                  foldTo={foldTo}
                 />
               ))}
             </SortableContext>

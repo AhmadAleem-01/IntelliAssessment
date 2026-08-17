@@ -9,42 +9,74 @@ import {
   formatValue,
 } from './appData';
 
+/**
+ * Turn a dot/array path into a readable label from its last segment:
+ * "applicant.fullName" → "Full name", "quals[].title" → "Title".
+ */
+function humanizePath(path: string): string {
+  const last = path.replace(/\[\d*\]/g, '').split('.').filter(Boolean).pop() ?? path;
+  const spaced = last
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/*
+ * Application-details reference panel (design.md). Soft-violet AI-tinted card
+ * (it's the application data that grounds AI judgements) with humanized labels
+ * and prominent values — a clean reference, not a raw path dump.
+ */
 const useStyles = makeStyles({
   panel: {
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-secondary)',
-    padding: '10px 12px',
-    marginBottom: '12px',
+    border: '1px solid var(--ds-ai-border)',
+    borderRadius: 'var(--ds-radius-card)',
+    backgroundColor: 'var(--ds-ai-surface)',
+    padding: '14px 16px',
+    marginBottom: '14px',
   },
   head: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
     fontSize: '10px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: 'var(--ds-ai-primary)',
+    marginBottom: '12px',
+  },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px 20px' },
+  row: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 },
+  key: {
+    fontSize: '10px',
     fontWeight: 600,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--color-text-tertiary)',
-    marginBottom: '8px',
+    letterSpacing: '0.04em',
+    color: 'var(--ds-text-muted)',
   },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' },
-  row: { display: 'flex', flexDirection: 'column', gap: '1px', padding: '2px 0' },
-  key: { fontSize: '11px', color: 'var(--color-text-secondary)' },
-  val: { fontSize: '12px', color: 'var(--color-text-primary)' },
-  // Repeating items: one bordered block per array element.
+  val: {
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 500,
+    color: 'var(--ds-text-strong)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  // Repeating items: one block per array element, divided.
   item: {
-    borderTop: '0.5px solid var(--color-border-tertiary)',
-    paddingTop: '6px',
-    marginTop: '6px',
+    borderTop: '1px solid var(--ds-ai-border)',
+    paddingTop: '10px',
+    marginTop: '10px',
   },
   itemHead: {
     fontSize: '10px',
-    fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
-    marginBottom: '4px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--ds-ai-primary)',
+    marginBottom: '8px',
   },
-  empty: { fontSize: '12px', color: 'var(--color-text-tertiary)', fontStyle: 'italic' },
+  empty: { fontSize: 'var(--ds-fs-caption)', color: 'var(--ds-text-muted)', fontStyle: 'italic' },
 });
 
 interface Props {
@@ -87,7 +119,9 @@ export function DetailsPanel({ storedLayout, applicationData }: Props) {
     0,
   );
 
-  const label = (f: DetailsField) => f.label ?? f.path;
+  // Prefer the author's label; otherwise humanize the last path segment so a
+  // field reads "Full name" instead of the raw dot-path "applicant.fullName".
+  const label = (f: DetailsField) => f.label ?? humanizePath(f.path);
 
   return (
     <div className={styles.panel}>
