@@ -30,7 +30,7 @@ import { buildLetterDocxBlob, type DocxLetterhead } from './letterToDocx';
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
+    borderRadius: 'var(--ds-radius-card)',
     maxWidth: '880px',
     width: '94vw',
     // The letter has its own fixed-width design; keep the dialog body
@@ -39,17 +39,17 @@ const useStyles = makeStyles({
   },
   content: {
     padding: '0',
-    backgroundColor: 'var(--color-background-tertiary)',
+    backgroundColor: 'var(--ds-surface-base)',
     overflow: 'auto',
     maxHeight: '70vh',
   },
   printBtn: {
-    backgroundColor: 'var(--color-purple) !important',
+    backgroundColor: 'var(--ds-ai-primary, #8B5CF6) !important',
     color: '#fff !important',
-    border: '0.5px solid var(--color-purple) !important',
+    border: '1px solid var(--ds-ai-primary, #8B5CF6) !important',
     ':hover': {
-      backgroundColor: 'var(--color-purple-text) !important',
-      border: '0.5px solid var(--color-purple-text) !important',
+      backgroundColor: 'var(--ds-ai-primary, #8B5CF6) !important',
+      border: '1px solid var(--ds-ai-primary, #8B5CF6) !important',
     },
   },
   loadingPad: {

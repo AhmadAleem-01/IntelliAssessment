@@ -17,9 +17,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '14px',
     padding: '14px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-tertiary)',
-    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-surface-base)',
+    border: '1px solid var(--ds-border)',
   },
   switchRow: {
     display: 'flex',
@@ -31,16 +31,16 @@ const useStyles = makeStyles({
   switchLabel: {
     fontSize: '13px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
   switchHint: {
     fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     lineHeight: 1.4,
   },
   empty: {
     fontSize: '12px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     fontStyle: 'italic',
   },
 });

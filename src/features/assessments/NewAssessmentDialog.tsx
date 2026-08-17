@@ -24,7 +24,7 @@ import { useCreateAssessmentInstance } from './api';
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
+    borderRadius: 'var(--ds-radius-card)',
     maxWidth: '520px',
     width: '94vw',
   },
@@ -34,15 +34,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     paddingBottom: '14px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    borderBottom: '0.5px solid var(--ds-border)',
     marginBottom: '18px',
   },
   headerMark: {
     width: '32px',
     height: '32px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-ai-surface, #F5F3FF)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -52,9 +52,9 @@ const useStyles = makeStyles({
   headerTitle: {
     fontSize: '14px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
-  headerSub: { fontSize: '12px', color: 'var(--color-text-secondary)' },
+  headerSub: { fontSize: '12px', color: 'var(--ds-text-body)' },
   fields: {
     display: 'flex',
     flexDirection: 'column',
@@ -62,11 +62,11 @@ const useStyles = makeStyles({
   },
   emptyTemplates: {
     fontSize: '12px',
-    color: 'var(--color-amber-text)',
-    backgroundColor: 'var(--color-amber-soft)',
+    color: '#b45309',
+    backgroundColor: 'var(--ds-pending-soft, #FEF3C7)',
     padding: '10px 12px',
-    borderRadius: 'var(--border-radius-md)',
-    border: '0.5px solid var(--color-amber)',
+    borderRadius: '8px',
+    border: '0.5px solid var(--ds-pending, #F59E0B)',
   },
 });
 

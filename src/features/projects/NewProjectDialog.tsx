@@ -18,7 +18,7 @@ import { ProjectFormFields, STATUS_TO_CODE, type StatusKey } from './ProjectForm
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
+    borderRadius: 'var(--ds-radius-card)',
     maxWidth: '480px',
     width: '92vw',
   },
@@ -31,15 +31,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     paddingBottom: '14px',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    borderBottom: '1px solid var(--ds-border)',
     marginBottom: '18px',
   },
   headerMark: {
     width: '32px',
     height: '32px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-ai-surface, #F5F3FF)',
+    color: 'var(--ds-ai-primary, #8B5CF6)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -49,9 +49,9 @@ const useStyles = makeStyles({
   headerTitle: {
     fontSize: '14px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
-  headerSub: { fontSize: '12px', color: 'var(--color-text-secondary)' },
+  headerSub: { fontSize: '12px', color: 'var(--ds-text-body)' },
 });
 
 interface Props {

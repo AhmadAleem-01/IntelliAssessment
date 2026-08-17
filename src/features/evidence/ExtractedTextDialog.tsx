@@ -14,7 +14,7 @@ import {
 
 const useStyles = makeStyles({
   surface: {
-    borderRadius: 'var(--border-radius-lg)',
+    borderRadius: 'var(--ds-radius-card)',
     maxWidth: '720px',
     width: '94vw',
     maxHeight: '88vh',
@@ -22,11 +22,11 @@ const useStyles = makeStyles({
   title: {
     fontSize: '15px',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
   sub: {
     fontSize: '12px',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     marginTop: '3px',
     marginBottom: '12px',
     overflow: 'hidden',
@@ -42,13 +42,13 @@ const useStyles = makeStyles({
     fontSize: '12px',
     lineHeight: 1.55,
     fontFamily: "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace",
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
-    backgroundColor: 'var(--color-background-secondary)',
+    backgroundColor: 'var(--ds-surface-base)',
     padding: '12px 14px',
-    borderRadius: 'var(--border-radius-md)',
-    border: '0.5px solid var(--color-border-tertiary)',
+    borderRadius: '8px',
+    border: '1px solid var(--ds-border)',
     margin: 0,
   },
   loadingPad: {
@@ -58,7 +58,7 @@ const useStyles = makeStyles({
   },
   empty: {
     fontSize: '12px',
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     fontStyle: 'italic',
   },
 });
