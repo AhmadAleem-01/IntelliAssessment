@@ -24,6 +24,8 @@ export const Dnx_assessment_instancesstatuscode = {
 export type Dnx_assessment_instancesstatuscode = keyof typeof Dnx_assessment_instancesstatuscode;
 
 export interface Dnx_assessment_instancesBase {
+  dnx_ai_avg_confidence?: number;
+  dnx_ai_response_count?: number;
   dnx_assessment_instanceid: string;
   dnx_assessment_name: string;
   "dnx_AssessmentTemplate@odata.bind"?: string;

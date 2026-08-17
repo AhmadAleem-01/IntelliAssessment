@@ -72,6 +72,20 @@
           "required": true,
           "maxLength": 100
         },
+        "dnx_ai_avg_confidence": {
+          "type": "string",
+          "title": "AI Average Confidence",
+          "x-ms-dataverse-attribute": "dnx_ai_avg_confidence",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "dnx_AI_Avg_Confidence"
+        },
+        "dnx_ai_response_count": {
+          "type": "string",
+          "title": "AI Response Count",
+          "x-ms-dataverse-attribute": "dnx_ai_response_count",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "dnx_AI_Response_Count"
+        },
         "dnx_application_details": {
           "type": "string",
           "title": "Application Details",
