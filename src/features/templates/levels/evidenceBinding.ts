@@ -43,6 +43,14 @@ export interface EvidenceBinding {
    * absent when the question doesn't use application data.
    */
   applicationDataPaths?: string[];
+  /**
+   * When true, repeating (`[]`) attribute paths resolve at the position of the
+   * question's own repeating subsection rather than defaulting to the first
+   * item. So a question inside the 3rd "Qualification N" subsection reads
+   * `qualifications[2].*`. Only meaningful when a bound path contains `[]` and
+   * the question lives under a repeating parent. Absent when not used.
+   */
+  useSubsectionIndex?: boolean;
 }
 
 /** True when a binding carries anything worth persisting. */
@@ -72,8 +80,14 @@ export function parseEvidenceBinding(
         const applicationDataPaths = Array.isArray(parsed.applicationDataPaths)
           ? parsed.applicationDataPaths.filter((p): p is string => typeof p === 'string')
           : undefined;
+        const useSubsectionIndex = parsed.useSubsectionIndex === true;
         if (fileVariable || query || (applicationDataPaths && applicationDataPaths.length)) {
-          return { fileVariable, query, applicationDataPaths };
+          return {
+            fileVariable,
+            query,
+            applicationDataPaths,
+            ...(useSubsectionIndex ? { useSubsectionIndex: true } : {}),
+          };
         }
       }
     } catch {
@@ -90,10 +104,14 @@ export function serializeEvidenceBinding(
 ): string | undefined {
   if (isEmptyBinding(binding)) return undefined;
   const paths = (binding!.applicationDataPaths ?? []).map((p) => p.trim()).filter(Boolean);
+  // Only persist the subsection-index flag when it can actually apply — i.e. a
+  // repeating path is bound. Avoids a stray true on non-repeating bindings.
+  const usesIndex = binding!.useSubsectionIndex === true && paths.some((p) => p.includes('[]'));
   const clean: EvidenceBinding = {
     fileVariable: binding!.fileVariable.trim(),
     query: binding!.query.trim(),
     ...(paths.length ? { applicationDataPaths: paths } : {}),
+    ...(usesIndex ? { useSubsectionIndex: true } : {}),
   };
   return JSON.stringify(clean);
 }

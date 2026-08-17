@@ -5,7 +5,8 @@ import type { Dnx_assessment_levels } from '../../generated/models/Dnx_assessmen
 import type { DataType } from '../templates/levels/levelTypes';
 import { parseOptions } from '../templates/levels/options';
 import { parseEvidenceBinding } from '../templates/levels/evidenceBinding';
-import { resolvePaths } from '../applicationDetails/appData';
+import { subsectionIndexOf } from '../templates/levels/treeBuilder';
+import { resolvePaths, resolvePathAt, formatValue } from '../applicationDetails/appData';
 
 /**
  * M6b — AI-assisted answer auto-population.
@@ -46,6 +47,13 @@ export interface AiQuestion {
    * `applicationData` before the prompt is built.
    */
   applicationDataPaths?: string[];
+  /**
+   * When true, repeating (`[]`) attribute paths resolve at `subsectionIndex`
+   * (the question's own repeating-subsection slot) rather than the first item.
+   */
+  useSubsectionIndex?: boolean;
+  /** 0-based slot of the question's repeating subsection (Qual 3 → 2). */
+  subsectionIndex?: number;
   /**
    * Resolved `{ path: displayValue }` for this question's bound attributes,
    * injected into the prompt as structured facts. Populated at runtime.
@@ -138,6 +146,10 @@ export function toAiQuestions(levels: Dnx_assessment_levels[]): AiQuestion[] {
         fileVariable: binding?.fileVariable || undefined,
         applicationDataPaths: binding?.applicationDataPaths?.length
           ? binding.applicationDataPaths
+          : undefined,
+        useSubsectionIndex: binding?.useSubsectionIndex || undefined,
+        subsectionIndex: binding?.useSubsectionIndex
+          ? subsectionIndexOf(levels, l.dnx_assessment_levelid)
           : undefined,
       };
     });
@@ -432,11 +444,30 @@ export function useAiPopulateMapped(assessmentName: string) {
     }): Promise<MappedPopulateResult> => {
       const appData = input.applicationData ?? null;
       // Resolve each question's bound attribute paths against the instance JSON,
-      // producing the `applicationData` map the prompt injects.
+      // producing the `applicationData` map the prompt injects. When the question
+      // opted into its subsection's position, repeating (`[]`) paths resolve at
+      // that index (Qual 3 → item 2) and are keyed by the concrete indexed path
+      // so the model + provenance see the exact source.
+      const resolveForQuestion = (q: AiQuestion): Record<string, string> => {
+        if (!appData || !q.applicationDataPaths?.length) return {};
+        if (!q.useSubsectionIndex) return resolvePaths(appData, q.applicationDataPaths);
+        const idx = q.subsectionIndex ?? 0;
+        const out: Record<string, string> = {};
+        for (const path of q.applicationDataPaths) {
+          const concrete = path.includes('[]') ? path.replace('[]', `[${idx}]`) : path;
+          const value = path.includes('[]')
+            ? resolvePathAt(appData, path, idx)
+            : resolvePaths(appData, [path])[path];
+          if (value !== undefined && value !== null && value !== '') {
+            out[concrete] = path.includes('[]') ? formatValue(value) : String(value);
+          }
+        }
+        return out;
+      };
       const withAppData = (qs: AiQuestion[]): AiQuestion[] =>
         qs.map((q) =>
           appData && q.applicationDataPaths?.length
-            ? { ...q, applicationData: resolvePaths(appData, q.applicationDataPaths) }
+            ? { ...q, applicationData: resolveForQuestion(q) }
             : q,
         );
 
