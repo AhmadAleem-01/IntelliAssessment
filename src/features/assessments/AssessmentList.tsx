@@ -5,51 +5,56 @@ import type { Dnx_assessment_instances } from '../../generated/models/Dnx_assess
 import { Dnx_assessment_instancesstatuscode } from '../../generated/models/Dnx_assessment_instancesModel';
 import { lookupName } from '../../lib/dataverse';
 
+/*
+ * Assessment list rows — Design System v1.0 ("Calm Efficiency"). Shared by the
+ * Assessments list page and the project detail page.
+ */
 const useStyles = makeStyles({
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
   row: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px 14px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
+    gap: '14px',
+    padding: '16px 18px',
+    borderRadius: 'var(--ds-radius-card)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
     textDecoration: 'none',
     color: 'inherit',
-    transition: 'background-color 0.12s ease, border 0.12s ease',
+    transition: 'border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease',
     ':hover': {
-      backgroundColor: 'var(--color-background-secondary)',
-      border: '0.5px solid var(--color-border-secondary)',
+      borderColor: 'var(--ds-text-muted)',
+      boxShadow: '0 2px 10px -4px rgba(17, 24, 39, 0.12)',
+      transform: 'translateY(-1px)',
     },
   },
   iconChip: {
-    width: '32px',
-    height: '32px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  textCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
+  textCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
   name: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   meta: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
     display: 'flex',
     gap: '8px',
     alignItems: 'center',
@@ -60,60 +65,59 @@ const useStyles = makeStyles({
     width: '3px',
     height: '3px',
     borderRadius: '50%',
-    backgroundColor: 'var(--color-text-tertiary)',
+    backgroundColor: 'var(--ds-border)',
   },
   pill: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '2px 8px',
-    borderRadius: 'var(--border-radius-pill)',
-    fontSize: '11px',
+    gap: '6px',
+    padding: '4px 11px',
+    borderRadius: 'var(--ds-radius-pill)',
+    fontSize: '12px',
     fontWeight: 500,
     flexShrink: 0,
   },
-  outcomePillSuitable: {
-    backgroundColor: 'var(--color-green-soft)',
-    color: 'var(--color-green-text)',
-    border: '0.5px solid var(--color-green)',
-  },
-  outcomePillNot: {
-    backgroundColor: 'var(--color-red-soft)',
-    color: 'var(--color-red-text)',
-    border: '0.5px solid var(--color-red)',
-  },
+  pillDot: { width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0 },
   empty: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px dashed var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-lg)',
-    padding: '32px 20px',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px dashed var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
+    padding: '40px 24px',
     textAlign: 'center',
-    color: 'var(--color-text-secondary)',
-    fontSize: '13px',
+    color: 'var(--ds-text-muted)',
+    fontSize: 'var(--ds-fs-body)',
   },
 });
 
-const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  Draft: { bg: 'var(--color-gray-soft)', color: 'var(--color-gray-text)', label: 'Draft' },
+const STATUS_STYLES: Record<
+  string,
+  { bg: string; color: string; dot: string; label: string }
+> = {
+  Draft: { bg: 'var(--ds-surface-base)', color: 'var(--ds-text-body)', dot: 'var(--ds-text-muted)', label: 'draft' },
   InProgress: {
-    bg: 'var(--color-blue-soft)',
-    color: 'var(--color-blue-text)',
-    label: 'In progress',
+    bg: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
+    dot: 'var(--ds-brand-accent)',
+    label: 'in progress',
   },
   PendingReview: {
-    bg: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
-    label: 'Pending review',
+    bg: 'var(--ds-pending-soft)',
+    color: '#b45309',
+    dot: 'var(--ds-pending)',
+    label: 'pending review',
   },
   Complete: {
-    bg: 'var(--color-green-soft)',
-    color: 'var(--color-green-text)',
-    label: 'Complete',
+    bg: 'var(--ds-suitable-soft)',
+    color: '#047857',
+    dot: 'var(--ds-suitable)',
+    label: 'complete',
   },
-  Active: { bg: 'var(--color-blue-soft)', color: 'var(--color-blue-text)', label: 'Active' },
+  Active: { bg: 'var(--ds-brand-accent-soft)', color: 'var(--ds-brand-accent)', dot: 'var(--ds-brand-accent)', label: 'active' },
   Inactive: {
-    bg: 'var(--color-gray-soft)',
-    color: 'var(--color-gray-text)',
-    label: 'Inactive',
+    bg: 'var(--ds-surface-base)',
+    color: 'var(--ds-text-body)',
+    dot: 'var(--ds-text-muted)',
+    label: 'inactive',
   },
 };
 
@@ -189,13 +193,26 @@ export function AssessmentList({ items, showProject, emptyMessage }: Props) {
               className={styles.pill}
               style={{ backgroundColor: status.bg, color: status.color }}
             >
+              <span className={styles.pillDot} style={{ backgroundColor: status.dot }} />
               {status.label}
             </span>
             {outcome === 0 && (
-              <span className={`${styles.pill} ${styles.outcomePillSuitable}`}>Suitable</span>
+              <span
+                className={styles.pill}
+                style={{ backgroundColor: 'var(--ds-suitable-soft)', color: '#047857' }}
+              >
+                <span className={styles.pillDot} style={{ backgroundColor: 'var(--ds-suitable)' }} />
+                suitable
+              </span>
             )}
             {outcome === 1 && (
-              <span className={`${styles.pill} ${styles.outcomePillNot}`}>Not suitable</span>
+              <span
+                className={styles.pill}
+                style={{ backgroundColor: 'var(--ds-not-suitable-soft)', color: '#b91c1c' }}
+              >
+                <span className={styles.pillDot} style={{ backgroundColor: 'var(--ds-not-suitable)' }} />
+                not suitable
+              </span>
             )}
           </Link>
         );

@@ -6,23 +6,30 @@ import {
 } from '@fluentui/react-icons';
 import { useCurrentUser } from '../lib/currentUser';
 import { useCurrentUserRoles, appRoleLabel } from '../lib/roles';
+import { useModalScrollLock } from '../lib/useModalScrollLock';
+import { ScrollToTop } from '../components/ScrollToTop';
 
+/*
+ * App shell — Design System v1.0 ("Calm Efficiency"). Deep-navy brand mark,
+ * blue accent on the active nav link + avatar, light-grey app background.
+ * The role pill is a neutral app-role badge (violet stays reserved for AI).
+ */
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: 'var(--color-background-tertiary)',
+    backgroundColor: 'var(--ds-surface-base)',
   },
   topbar: {
-    height: '52px',
-    backgroundColor: 'var(--color-background-primary)',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    height: '56px',
+    backgroundColor: 'var(--ds-surface-card)',
+    borderBottom: '1px solid var(--ds-border)',
     display: 'flex',
     alignItems: 'center',
-    paddingLeft: '20px',
-    paddingRight: '20px',
-    gap: '16px',
+    paddingLeft: '24px',
+    paddingRight: '24px',
+    gap: '18px',
     position: 'sticky',
     top: 0,
     zIndex: 10,
@@ -30,26 +37,26 @@ const useStyles = makeStyles({
   brand: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
-    letterSpacing: '-0.005em',
+    gap: '10px',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
+    letterSpacing: '-0.01em',
   },
   brandMark: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '6px',
-    backgroundColor: 'var(--color-purple)',
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    backgroundColor: 'var(--ds-brand-primary)',
     color: '#fff',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   divider: {
-    width: '0.5px',
+    width: '1px',
     height: '24px',
-    backgroundColor: 'var(--color-border-tertiary)',
+    backgroundColor: 'var(--ds-border)',
   },
   nav: {
     display: 'flex',
@@ -60,73 +67,73 @@ const useStyles = makeStyles({
   navLink: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '6px 12px',
+    padding: '7px 14px',
     borderRadius: 'var(--border-radius-md)',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-body)',
     textDecoration: 'none',
-    fontSize: '13px',
-    fontWeight: 400,
-    transition: 'background-color 0.1s ease',
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 500,
+    transition: 'background-color 0.1s ease, color 0.1s ease',
     ':hover': {
-      backgroundColor: 'var(--color-background-secondary)',
-      color: 'var(--color-text-primary)',
+      backgroundColor: 'var(--ds-surface-base)',
+      color: 'var(--ds-text-strong)',
     },
   },
   navLinkActive: {
-    backgroundColor: 'var(--color-background-secondary)',
-    color: 'var(--color-text-primary)',
-    fontWeight: 500,
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
+    fontWeight: 600,
   },
   topbarRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
   },
   iconBtn: {
-    width: '32px',
-    height: '32px',
+    width: '34px',
+    height: '34px',
     borderRadius: 'var(--border-radius-md)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-muted)',
     ':hover': {
-      backgroundColor: 'var(--color-background-secondary)',
-      color: 'var(--color-text-primary)',
+      backgroundColor: 'var(--ds-surface-base)',
+      color: 'var(--ds-text-strong)',
     },
   },
   rolePill: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '3px 9px',
-    borderRadius: 'var(--border-radius-pill)',
-    fontSize: '11px',
+    padding: '4px 11px',
+    borderRadius: 'var(--ds-radius-pill)',
+    fontSize: '12px',
     fontWeight: 500,
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
     whiteSpace: 'nowrap',
   },
   rolePillNone: {
-    backgroundColor: 'var(--color-gray-soft)',
-    color: 'var(--color-gray-text)',
+    backgroundColor: 'var(--ds-surface-base)',
+    color: 'var(--ds-text-muted)',
   },
   avatar: {
-    width: '28px',
-    height: '28px',
+    width: '30px',
+    height: '30px',
     borderRadius: '50%',
-    backgroundColor: 'var(--color-purple)',
+    backgroundColor: 'var(--ds-brand-accent)',
     color: '#fff',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '11px',
-    fontWeight: 500,
+    fontWeight: 600,
     cursor: 'pointer',
   },
   main: {
     flex: 1,
-    padding: '20px',
+    padding: '24px',
     maxWidth: '1400px',
     width: '100%',
     margin: '0 auto',
@@ -150,6 +157,7 @@ function initialsOf(name: string | undefined): string {
 
 export function AppLayout() {
   const styles = useStyles();
+  useModalScrollLock();
   const { data: user } = useCurrentUser();
   const roles = useCurrentUserRoles();
   const name = user?.fullName;
@@ -205,6 +213,7 @@ export function AppLayout() {
       <main className={styles.main}>
         <Outlet />
       </main>
+      <ScrollToTop />
     </div>
   );
 }

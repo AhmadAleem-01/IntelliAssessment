@@ -2,7 +2,6 @@ import { forwardRef, useEffect, useRef, useState } from 'react';
 import { makeStyles, Tooltip } from '@fluentui/react-components';
 import {
   Flag16Regular,
-  CheckmarkCircle16Regular,
   CheckmarkCircle16Filled,
   DismissCircle16Filled,
   Sparkle16Filled,
@@ -25,12 +24,25 @@ import type { Criteria } from '../rules/types';
 
 const TEXT_DEBOUNCE_MS = 800;
 
+/** Compact relative "Nm/h/d ago" for a flag's timestamp. */
+function fmtFlagTime(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 const useStyles = makeStyles({
   row: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    padding: '12px 0',
+    gap: '8px',
+    padding: '16px 0',
+    borderBottom: '1px solid var(--ds-border)',
+    ':last-child': { borderBottom: 'none' },
   },
   labelRow: {
     display: 'flex',
@@ -39,12 +51,12 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
   },
   label: {
-    fontSize: '13px',
+    fontSize: 'var(--ds-fs-body)',
     fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    color: 'var(--ds-text-strong)',
   },
   required: {
-    color: 'var(--color-red)',
+    color: 'var(--ds-not-suitable)',
     fontWeight: 500,
   },
   letterDot: {
@@ -52,7 +64,7 @@ const useStyles = makeStyles({
     width: '6px',
     height: '6px',
     borderRadius: '50%',
-    backgroundColor: 'var(--color-purple)',
+    backgroundColor: 'var(--ds-brand-accent)',
   },
   aiBadge: {
     display: 'inline-flex',
@@ -64,101 +76,93 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '0.02em',
     lineHeight: 1.3,
-    backgroundColor: 'var(--color-purple-soft)',
-    color: 'var(--color-purple-text)',
-    border: '0.5px solid var(--color-purple)',
+    backgroundColor: 'var(--ds-ai-surface)',
+    color: 'var(--ds-ai-primary)',
+    border: '0.5px solid var(--ds-ai-border)',
   },
   outcomeChip: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '2px 8px',
-    borderRadius: '999px',
+    padding: '3px 10px',
+    borderRadius: 'var(--ds-radius-pill)',
     fontSize: '11px',
     fontWeight: 600,
-    letterSpacing: '0.02em',
+    letterSpacing: '0.01em',
     lineHeight: 1.3,
   },
   outcomeChipPass: {
-    backgroundColor: 'var(--color-green-soft)',
-    color: 'var(--color-green-text)',
-    border: '0.5px solid var(--color-green)',
+    backgroundColor: 'var(--ds-suitable-soft)',
+    color: '#047857',
   },
   outcomeChipFail: {
-    backgroundColor: 'var(--color-red-soft, #fde2e1)',
-    color: 'var(--color-red-text, #8a1f1a)',
-    border: '0.5px solid var(--color-red, #c4302b)',
+    backgroundColor: 'var(--ds-not-suitable-soft)',
+    color: '#b91c1c',
   },
   hint: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
-    lineHeight: 1.4,
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    lineHeight: 1.45,
   },
   flagged: {
-    paddingLeft: '10px',
-    boxShadow: 'inset 3px 0 0 0 var(--color-amber)',
+    paddingLeft: '12px',
+    boxShadow: 'inset 3px 0 0 0 var(--ds-pending)',
   },
+  // Light "flagged by reviewer" card under the question — soft amber fill with
+  // a subtle amber border (not a heavy filled block).
   flagBlock: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '10px 12px',
-    borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-amber-soft)',
-    border: '0.5px solid var(--color-amber)',
-    marginTop: '4px',
-    marginBottom: '4px',
-  },
-  flagBlockBody: {
-    display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-    flex: 1,
-    minWidth: 0,
+    gap: '8px',
+    padding: '12px 14px',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'var(--ds-pending-soft)',
+    border: '1px solid var(--ds-pending)',
+    marginTop: '8px',
   },
   flagTitle: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '5px',
+    gap: '6px',
     fontSize: '10px',
-    fontWeight: 600,
-    color: 'var(--color-amber-text)',
+    fontWeight: 700,
+    color: '#b45309',
     textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    letterSpacing: '0.05em',
   },
+  flagMeta: { fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ds-text-muted)' },
   flagText: {
-    fontSize: '12px',
-    color: 'var(--color-text-primary)',
-    lineHeight: 1.4,
+    fontSize: 'var(--ds-fs-body)',
+    color: 'var(--ds-text-strong)',
+    lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
   },
-  flagResolve: {
-    backgroundColor: 'var(--color-green)',
-    border: '0.5px solid var(--color-green)',
+  flagActions: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' },
+  flagBtn: {
     cursor: 'pointer',
-    padding: '6px 12px',
-    borderRadius: 'var(--border-radius-md)',
-    fontSize: '12px',
+    padding: '7px 14px',
+    borderRadius: '8px',
+    fontSize: '13px',
     fontWeight: 600,
     lineHeight: 1,
-    color: '#ffffff',
     display: 'inline-flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
-    height: '28px',
-    transition: 'background-color 0.1s ease, transform 0.05s ease',
-    ':hover': {
-      backgroundColor: 'var(--color-green-text)',
-    },
-    ':active': {
-      transform: 'translateY(1px)',
-    },
-    ':disabled': {
-      opacity: 0.6,
-      cursor: 'not-allowed',
-    },
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-body)',
+    transition: 'background-color 0.1s ease, border-color 0.1s ease',
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+    ':disabled': { opacity: 0.6, cursor: 'not-allowed' },
+  },
+  flagReply: {
+    background: 'transparent',
+    border: 'none',
+    padding: '7px 4px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: 'var(--ds-text-body)',
+    ':hover': { color: 'var(--ds-text-strong)' },
   },
 });
 
@@ -171,6 +175,8 @@ interface Props {
   flags?: Dnx_reviewer_comments[];
   onResolveFlag?: (commentId: string) => void;
   resolvingFlagId?: string | null;
+  /** Open the comments drawer to reply, with this question pre-tagged. */
+  onReplyFlag?: () => void;
   /** Optional pass/fail rule attached to this question. */
   criteria?: Criteria;
 }
@@ -194,7 +200,7 @@ function aiSourceAttributes(stored: string | undefined): string {
 }
 
 export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRow(
-  { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId, criteria },
+  { level, response, onChange, disabled, flags, onResolveFlag, resolvingFlagId, onReplyFlag, criteria },
   ref,
 ) {
   const styles = useStyles();
@@ -319,32 +325,47 @@ export const QuestionRow = forwardRef<HTMLDivElement, Props>(function QuestionRo
       </div>
       {level.dnx_hint_text && <div className={styles.hint}>{level.dnx_hint_text}</div>}
       {hasFlags &&
-        flags!.map((flag) => (
-          <div key={flag.dnx_reviewer_commentid} className={styles.flagBlock}>
-            <div className={styles.flagBlockBody}>
+        flags!.map((flag) => {
+          const reviewer = flag.owneridname ?? flag.createdbyname;
+          const when = flag.createdon ? fmtFlagTime(flag.createdon) : null;
+          return (
+            <div key={flag.dnx_reviewer_commentid} className={styles.flagBlock}>
               <span className={styles.flagTitle}>
                 <Flag16Regular />
-                Reviewer flag
+                Flagged by reviewer
+                {(reviewer || when) && (
+                  <span className={styles.flagMeta}>
+                    · {reviewer ?? 'Reviewer'}{when ? ` · ${when}` : ''}
+                  </span>
+                )}
               </span>
               {flag.dnx_comment_text && (
                 <div className={styles.flagText}>{flag.dnx_comment_text}</div>
               )}
+              {(onResolveFlag || onReplyFlag) && (
+                <div className={styles.flagActions}>
+                  {onResolveFlag && (
+                    <button
+                      type="button"
+                      className={styles.flagBtn}
+                      disabled={resolvingFlagId === flag.dnx_reviewer_commentid}
+                      onClick={() => onResolveFlag(flag.dnx_reviewer_commentid)}
+                    >
+                      {resolvingFlagId === flag.dnx_reviewer_commentid
+                        ? 'Resolving…'
+                        : 'Mark as resolved'}
+                    </button>
+                  )}
+                  {onReplyFlag && (
+                    <button type="button" className={styles.flagReply} onClick={onReplyFlag}>
+                      Reply
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            {onResolveFlag && (
-              <button
-                type="button"
-                className={styles.flagResolve}
-                disabled={resolvingFlagId === flag.dnx_reviewer_commentid}
-                onClick={() => onResolveFlag(flag.dnx_reviewer_commentid)}
-              >
-                <CheckmarkCircle16Regular />
-                {resolvingFlagId === flag.dnx_reviewer_commentid
-                  ? 'Resolving...'
-                  : 'Mark resolved'}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       {renderField()}
     </div>
   );

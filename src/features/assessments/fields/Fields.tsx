@@ -14,63 +14,132 @@
  *   Date       → string (YYYY-MM-DD)
  */
 
-import {
-  Input,
-  Textarea,
-  Dropdown,
-  Option,
-  Checkbox,
-  makeStyles,
-} from '@fluentui/react-components';
+import { Input, Textarea, makeStyles } from '@fluentui/react-components';
+import { Checkmark12Filled } from '@fluentui/react-icons';
 
+/*
+ * Field components — Design System v1.0 (assessment detail redesign):
+ *  - Boolean: Yes/No segmented buttons (active = navy fill).
+ *  - OptionSet: bordered radio rows (active = violet ring + soft-violet fill).
+ *  - Multi: bordered checkbox chips in a wrapping row.
+ *  - Date: DS input + a "Today" quick-fill button.
+ */
 const useStyles = makeStyles({
-  booleanRow: {
-    display: 'inline-flex',
-    gap: '6px',
-  },
+  booleanRow: { display: 'inline-flex', gap: '8px' },
   booleanBtn: {
-    padding: '6px 14px',
+    padding: '8px 20px',
     borderRadius: 'var(--border-radius-md)',
-    fontSize: '13px',
+    fontSize: 'var(--ds-fs-body)',
     fontWeight: 500,
     cursor: 'pointer',
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    color: 'var(--color-text-primary)',
-    transition: 'background-color 0.1s ease, border 0.1s ease',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    color: 'var(--ds-text-strong)',
+    transition: 'background-color 0.1s ease, border-color 0.1s ease',
     minWidth: '64px',
-    ':hover': {
-      backgroundColor: 'var(--color-background-secondary)',
-    },
-    ':disabled': {
-      cursor: 'not-allowed',
-      opacity: 0.6,
-    },
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+    ':disabled': { cursor: 'not-allowed', opacity: 0.6 },
   },
-  booleanYesActive: {
-    backgroundColor: 'var(--color-green) !important',
+  booleanActive: {
+    backgroundColor: 'var(--ds-brand-primary) !important',
     color: '#fff !important',
-    border: '0.5px solid var(--color-green) !important',
+    borderColor: 'var(--ds-brand-primary) !important',
   },
-  booleanNoActive: {
-    backgroundColor: 'var(--color-red) !important',
-    color: '#fff !important',
-    border: '0.5px solid var(--color-red) !important',
-  },
-  multiList: {
+
+  /* Single-choice radio rows */
+  radioList: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  radioRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    borderRadius: 'var(--border-radius-md)',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%',
+    transition: 'border-color 0.1s ease, background-color 0.1s ease',
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+    ':disabled': { cursor: 'not-allowed', opacity: 0.6 },
   },
+  radioRowActive: {
+    borderColor: 'var(--ds-ai-primary)',
+    backgroundColor: 'var(--ds-ai-surface)',
+  },
+  radioMark: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    border: '2px solid var(--ds-border)',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioMarkActive: { borderColor: 'var(--ds-ai-primary)' },
+  radioMarkInner: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--ds-ai-primary)' },
+  radioLabel: { flex: 1, minWidth: 0, fontSize: 'var(--ds-fs-body)', color: 'var(--ds-text-strong)' },
+
+  /* Multi-select checkbox chips */
+  chipRow: { display: 'flex', flexWrap: 'wrap', gap: '10px' },
+  chip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    borderRadius: 'var(--border-radius-md)',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    cursor: 'pointer',
+    fontSize: 'var(--ds-fs-body)',
+    color: 'var(--ds-text-strong)',
+    transition: 'border-color 0.1s ease, background-color 0.1s ease',
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+    ':disabled': { cursor: 'not-allowed', opacity: 0.6 },
+  },
+  chipActive: {
+    borderColor: 'var(--ds-brand-accent)',
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
+  },
+  chipBox: {
+    width: '16px',
+    height: '16px',
+    borderRadius: '4px',
+    border: '2px solid var(--ds-border)',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+  },
+  chipBoxActive: { backgroundColor: 'var(--ds-brand-accent)', borderColor: 'var(--ds-brand-accent)' },
+
+  /* Date */
+  dateRow: { display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
   dateInput: {
     fontFamily: 'inherit',
-    fontSize: '13px',
-    padding: '7px 10px',
-    border: '0.5px solid var(--color-border-tertiary)',
+    fontSize: 'var(--ds-fs-body)',
+    padding: '8px 12px',
+    border: '1px solid var(--ds-border)',
     borderRadius: 'var(--border-radius-md)',
-    backgroundColor: 'var(--color-background-primary)',
-    color: 'var(--color-text-primary)',
+    backgroundColor: 'var(--ds-surface-card)',
+    color: 'var(--ds-text-strong)',
     width: '180px',
+    ':disabled': { opacity: 0.6, cursor: 'not-allowed' },
+  },
+  quickBtn: {
+    padding: '8px 14px',
+    borderRadius: 'var(--border-radius-md)',
+    border: '1px solid var(--ds-border)',
+    backgroundColor: 'var(--ds-surface-card)',
+    color: 'var(--ds-text-body)',
+    fontSize: 'var(--ds-fs-caption)',
+    fontWeight: 500,
+    cursor: 'pointer',
+    ':hover': { borderColor: 'var(--ds-text-muted)' },
+    ':disabled': { opacity: 0.6, cursor: 'not-allowed' },
   },
 });
 
@@ -90,7 +159,7 @@ export function BooleanField({ value, onChange, disabled }: BooleanFieldProps) {
     <div className={styles.booleanRow}>
       <button
         type="button"
-        className={`${styles.booleanBtn} ${value === true ? styles.booleanYesActive : ''}`}
+        className={`${styles.booleanBtn} ${value === true ? styles.booleanActive : ''}`}
         onClick={() => onChange(true)}
         disabled={disabled}
         aria-pressed={value === true}
@@ -99,7 +168,7 @@ export function BooleanField({ value, onChange, disabled }: BooleanFieldProps) {
       </button>
       <button
         type="button"
-        className={`${styles.booleanBtn} ${value === false ? styles.booleanNoActive : ''}`}
+        className={`${styles.booleanBtn} ${value === false ? styles.booleanActive : ''}`}
         onClick={() => onChange(false)}
         disabled={disabled}
         aria-pressed={value === false}
@@ -118,20 +187,29 @@ interface OptionSetFieldProps extends BaseProps {
   onChange: (next: string) => void;
 }
 export function OptionSetField({ value, options, onChange, disabled }: OptionSetFieldProps) {
+  const styles = useStyles();
   return (
-    <Dropdown
-      value={value}
-      selectedOptions={value ? [value] : []}
-      onOptionSelect={(_, d) => d.optionValue && onChange(d.optionValue)}
-      placeholder="Select..."
-      disabled={disabled}
-    >
-      {options.map((o) => (
-        <Option key={o} value={o}>
-          {o}
-        </Option>
-      ))}
-    </Dropdown>
+    <div className={styles.radioList} role="radiogroup">
+      {options.map((o) => {
+        const active = value === o;
+        return (
+          <button
+            key={o}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`${styles.radioRow} ${active ? styles.radioRowActive : ''}`}
+            onClick={() => onChange(o)}
+            disabled={disabled}
+          >
+            <span className={`${styles.radioMark} ${active ? styles.radioMarkActive : ''}`}>
+              {active && <span className={styles.radioMarkInner} />}
+            </span>
+            <span className={styles.radioLabel}>{o}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -158,16 +236,26 @@ export function MultiSelectField({
     }
   }
   return (
-    <div className={styles.multiList}>
-      {options.map((o) => (
-        <Checkbox
-          key={o}
-          label={o}
-          checked={selectedSet.has(o)}
-          onChange={() => toggle(o)}
-          disabled={disabled}
-        />
-      ))}
+    <div className={styles.chipRow}>
+      {options.map((o) => {
+        const active = selectedSet.has(o);
+        return (
+          <button
+            key={o}
+            type="button"
+            role="checkbox"
+            aria-checked={active}
+            className={`${styles.chip} ${active ? styles.chipActive : ''}`}
+            onClick={() => toggle(o)}
+            disabled={disabled}
+          >
+            <span className={`${styles.chipBox} ${active ? styles.chipBoxActive : ''}`}>
+              {active && <Checkmark12Filled />}
+            </span>
+            {o}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -212,12 +300,22 @@ interface DateFieldProps extends BaseProps {
 export function DateField({ value, onChange, disabled }: DateFieldProps) {
   const styles = useStyles();
   return (
-    <input
-      type="date"
-      className={styles.dateInput}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-    />
+    <div className={styles.dateRow}>
+      <input
+        type="date"
+        className={styles.dateInput}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
+      <button
+        type="button"
+        className={styles.quickBtn}
+        onClick={() => onChange(new Date().toISOString().slice(0, 10))}
+        disabled={disabled}
+      >
+        Today
+      </button>
+    </div>
   );
 }

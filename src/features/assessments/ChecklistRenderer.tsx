@@ -34,80 +34,90 @@ import { useCriteriaForLevels } from '../rules/api';
 import type { Criteria, EvaluationOutcome } from '../rules/types';
 import { evaluateNode, evaluateAssessment, findRootCriteria } from '../rules/engine';
 
+/*
+ * Checklist — Design System v1.0 ("Calm Efficiency"). Spacious white section
+ * cards, blue-accent subsection bullet, semantic banners, dotted outcome pills.
+ */
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '14px',
   },
   banner: { marginBottom: '12px' },
   lockBanner: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '12px 16px',
-    borderRadius: 'var(--border-radius-lg)',
-    backgroundColor: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
-    border: '0.5px solid var(--color-amber)',
+    padding: '14px 18px',
+    borderRadius: 'var(--ds-radius-card)',
+    backgroundColor: 'var(--ds-pending-soft)',
+    color: '#b45309',
+    border: '1px solid var(--ds-pending)',
     marginBottom: '8px',
   },
   lockBannerLocked: {
-    backgroundColor: 'var(--color-gray-soft)',
-    color: 'var(--color-text-secondary)',
-    border: '0.5px solid var(--color-border-secondary)',
+    backgroundColor: 'var(--ds-surface-base)',
+    color: 'var(--ds-text-body)',
+    border: '1px solid var(--ds-border)',
   },
   lockIcon: { flexShrink: 0, display: 'flex', alignItems: 'center' },
-  lockText: { flex: 1, fontSize: '12px', lineHeight: 1.4 },
-  lockTitle: { fontWeight: 500, color: 'var(--color-text-primary)' },
-  flagsBanner: {
-    display: 'flex',
+  lockText: { flex: 1, fontSize: 'var(--ds-fs-caption)', lineHeight: 1.45 },
+  lockTitle: { fontWeight: 600, color: 'var(--ds-text-strong)' },
+  // Floating flag navigator (bottom-right, above the app-details/back-to-top FABs).
+  flagFab: {
+    position: 'fixed',
+    right: '24px',
+    bottom: '132px',
+    zIndex: 40,
+    display: 'inline-flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px 16px',
-    borderRadius: 'var(--border-radius-lg)',
-    backgroundColor: 'var(--color-amber-soft)',
-    color: 'var(--color-amber-text)',
-    border: '0.5px solid var(--color-amber)',
-    marginBottom: '8px',
+    gap: '10px',
+    height: '44px',
+    padding: '0 8px 0 14px',
+    borderRadius: 'var(--ds-radius-pill)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-pending)',
+    boxShadow: '0 6px 20px -6px rgba(17, 24, 39, 0.35)',
   },
-  flagsCount: {
-    flex: 1,
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
-    lineHeight: 1.3,
-  },
-  flagsSub: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
-    marginTop: '2px',
-  },
-  flagsCounter: {
-    fontSize: '12px',
+  flagFabIcon: { color: '#b45309', display: 'flex', flexShrink: 0 },
+  flagFabLabel: {
+    fontSize: 'var(--ds-fs-caption)',
     fontWeight: 600,
-    color: 'var(--color-amber-text)',
-    backgroundColor: 'var(--color-background-primary)',
-    padding: '4px 10px',
-    borderRadius: 'var(--border-radius-md)',
-    border: '0.5px solid var(--color-amber)',
-    flexShrink: 0,
+    color: '#b45309',
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  flagFabBtn: {
+    height: '30px',
+    padding: '0 12px',
+    borderRadius: 'var(--ds-radius-pill)',
+    border: 'none',
+    backgroundColor: 'var(--ds-pending)',
+    color: '#fff',
+    fontSize: 'var(--ds-fs-caption)',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    ':hover': { backgroundColor: '#d98a08' },
   },
   section: {
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
     overflow: 'hidden',
   },
   sectionHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '12px 18px',
+    gap: '10px',
+    padding: '16px 20px',
     cursor: 'pointer',
-    backgroundColor: 'var(--color-background-secondary)',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    backgroundColor: 'var(--ds-surface-card)',
+    borderBottom: '1px solid var(--ds-border)',
     userSelect: 'none',
+    transition: 'background-color 0.1s ease',
+    ':hover': { backgroundColor: 'var(--ds-surface-base)' },
   },
   sectionHeaderCollapsed: {
     borderBottom: 'none',
@@ -119,137 +129,156 @@ const useStyles = makeStyles({
     background: 'transparent',
     padding: 0,
     cursor: 'pointer',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--ds-text-muted)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionLabel: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
+    fontSize: 'var(--ds-fs-h2)',
+    fontWeight: 600,
+    color: 'var(--ds-text-heading)',
     flex: 1,
   },
   sectionMeta: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    fontVariantNumeric: 'tabular-nums',
   },
   sectionBody: {
-    padding: '6px 18px 14px 18px',
+    padding: '8px 20px 18px 20px',
     display: 'flex',
     flexDirection: 'column',
   },
   subsection: {
-    border: '0.5px solid var(--color-border-secondary)',
+    border: '1px solid var(--ds-border)',
     borderRadius: 'var(--border-radius-md)',
-    marginTop: '14px',
+    marginTop: '16px',
     marginBottom: '4px',
     overflow: 'hidden',
-    backgroundColor: 'var(--color-background-primary)',
+    backgroundColor: 'var(--ds-surface-card)',
   },
   subsectionHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '10px 14px',
-    backgroundColor: 'var(--color-background-tertiary)',
-    borderBottom: '0.5px solid var(--color-border-tertiary)',
+    padding: '12px 16px',
+    backgroundColor: 'var(--ds-surface-base)',
+    borderBottom: '1px solid var(--ds-border)',
     cursor: 'pointer',
     userSelect: 'none',
     transition: 'background-color 0.1s ease',
     ':hover': {
-      backgroundColor: 'var(--color-background-secondary)',
+      backgroundColor: 'var(--ds-brand-accent-soft)',
     },
   },
   subsectionHeaderCollapsed: {
     borderBottom: 'none',
   },
-  subsectionBullet: {
-    display: 'inline-block',
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    backgroundColor: 'var(--color-purple)',
+  subIndex: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '7px',
+    backgroundColor: 'var(--ds-brand-accent-soft)',
+    color: 'var(--ds-brand-accent)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: 700,
     flexShrink: 0,
   },
+  subTitleBlock: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' },
   subsectionTitle: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: 'var(--color-text-primary)',
-    flex: 1,
-    minWidth: 0,
+    fontSize: 'var(--ds-fs-body)',
+    fontWeight: 600,
+    color: 'var(--ds-text-strong)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  subSubtitle: {
+    fontSize: '11px',
+    color: 'var(--ds-text-muted)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  subStatus: {
+    padding: '3px 10px',
+    borderRadius: 'var(--ds-radius-pill)',
+    fontSize: '11px',
+    fontWeight: 600,
+    flexShrink: 0,
+  },
+  subStatusDone: { backgroundColor: 'var(--ds-suitable-soft)', color: '#047857' },
+  subStatusPartial: { backgroundColor: 'var(--ds-pending-soft)', color: '#b45309' },
   subsectionLabel: {
     fontSize: '10px',
     fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     flexShrink: 0,
   },
   subsectionDesc: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
-    padding: '8px 14px 0 14px',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
+    padding: '10px 16px 0 16px',
   },
   subsectionBody: {
-    padding: '4px 14px 10px 14px',
+    padding: '4px 16px 12px 16px',
   },
   empty: {
-    padding: '40px 20px',
+    padding: '48px 24px',
     textAlign: 'center',
-    color: 'var(--color-text-secondary)',
-    fontSize: '13px',
-    backgroundColor: 'var(--color-background-primary)',
-    border: '0.5px dashed var(--color-border-secondary)',
-    borderRadius: 'var(--border-radius-lg)',
+    color: 'var(--ds-text-muted)',
+    fontSize: 'var(--ds-fs-body)',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px dashed var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
   },
   outcomeChip: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    padding: '2px 8px',
-    borderRadius: '999px',
+    gap: '5px',
+    padding: '3px 10px',
+    borderRadius: 'var(--ds-radius-pill)',
     fontSize: '11px',
     fontWeight: 600,
-    letterSpacing: '0.02em',
+    letterSpacing: '0.01em',
     lineHeight: 1.3,
     flexShrink: 0,
   },
   overallBanner: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '10px 14px',
-    backgroundColor: 'var(--color-background-secondary)',
-    border: '0.5px solid var(--color-border-tertiary)',
-    borderRadius: 'var(--border-radius-lg)',
+    gap: '12px',
+    padding: '14px 18px',
+    backgroundColor: 'var(--ds-surface-card)',
+    border: '1px solid var(--ds-border)',
+    borderRadius: 'var(--ds-radius-card)',
     marginBottom: '4px',
   },
   overallLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
+    color: 'var(--ds-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
   },
   overallHint: {
-    fontSize: '11px',
-    color: 'var(--color-text-secondary)',
+    fontSize: 'var(--ds-fs-caption)',
+    color: 'var(--ds-text-muted)',
     flex: 1,
   },
   outcomeChipPass: {
-    backgroundColor: 'var(--color-green-soft)',
-    color: 'var(--color-green-text)',
-    border: '0.5px solid var(--color-green)',
+    backgroundColor: 'var(--ds-suitable-soft)',
+    color: '#047857',
   },
   outcomeChipFail: {
-    backgroundColor: 'var(--color-red-soft)',
-    color: 'var(--color-red-text)',
-    border: '0.5px solid var(--color-red)',
+    backgroundColor: 'var(--ds-not-suitable-soft)',
+    color: '#b91c1c',
   },
 });
 
@@ -303,6 +332,8 @@ interface Props {
    * Null / omitted when the instance has no application-details file.
    */
   applicationData?: Record<string, unknown> | null;
+  /** Open the comments drawer to reply to a flag, pre-tagging the question. */
+  onReplyToFlag?: (levelId: string) => void;
 }
 
 export function ChecklistRenderer({
@@ -314,6 +345,7 @@ export function ChecklistRenderer({
   submittedOn,
   canAssess = true,
   applicationData = null,
+  onReplyToFlag,
 }: Props) {
   const styles = useStyles();
   const reopen = useReopenAssessment(instanceId);
@@ -449,28 +481,6 @@ export function ChecklistRenderer({
           </span>
         </div>
       )}
-      {totalFlaggedQuestions > 0 && (
-        <div className={styles.flagsBanner}>
-          <span className={styles.lockIcon}>
-            <Flag16Filled />
-          </span>
-          <div className={styles.flagsCount}>
-            {totalFlaggedQuestions} question{totalFlaggedQuestions === 1 ? '' : 's'} flagged by the reviewer
-            <div className={styles.flagsSub}>
-              Jump to each flag and address the reviewer's notes. Mark each as resolved
-              when fixed.
-            </div>
-          </div>
-          {currentFlagIdx > 0 && (
-            <span className={styles.flagsCounter}>
-              {currentFlagIdx} of {totalFlaggedQuestions}
-            </span>
-          )}
-          <Button appearance="secondary" onClick={jumpToNextFlag}>
-            {currentFlagIdx === 0 ? 'Jump to first flag' : 'Next flag'}
-          </Button>
-        </div>
-      )}
       {(readOnly || !canAssess) && (
         <div
           className={`${styles.lockBanner} ${pendingReview && canAssess ? '' : styles.lockBannerLocked}`}
@@ -543,10 +553,29 @@ export function ChecklistRenderer({
           }
           onResolveFlag={(commentId) => resolveFlag.mutate(commentId)}
           resolvingFlagId={resolveFlag.isPending ? resolveFlag.variables ?? null : null}
+          onReplyFlag={onReplyToFlag}
           disabled={inputsLocked || upsert.isPending}
           applicationData={applicationData}
         />
       ))}
+
+      {/* Floating flag navigator — cycles through reviewer-flagged questions.
+          Sits above the app-details / back-to-top FABs (bottom 24/78, so 132). */}
+      {totalFlaggedQuestions > 0 && (
+        <div className={styles.flagFab}>
+          <span className={styles.flagFabIcon}>
+            <Flag16Filled />
+          </span>
+          <span className={styles.flagFabLabel}>
+            {currentFlagIdx > 0
+              ? `Flag ${currentFlagIdx} of ${totalFlaggedQuestions}`
+              : `${totalFlaggedQuestions} flag${totalFlaggedQuestions === 1 ? '' : 's'}`}
+          </span>
+          <button type="button" className={styles.flagFabBtn} onClick={jumpToNextFlag}>
+            {currentFlagIdx === 0 ? 'Jump to first' : 'Next flag'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -561,6 +590,8 @@ interface SectionBlockProps {
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
   onResolveFlag: (commentId: string) => void;
   resolvingFlagId: string | null;
+  /** Open the comments drawer to reply to a flag, pre-tagging the question. */
+  onReplyFlag?: (levelId: string) => void;
   disabled: boolean;
   /** Parsed application-details JSON for resolving per-level detail panels. */
   applicationData: Record<string, unknown> | null;
@@ -611,6 +642,7 @@ function SectionBlock({
   onAnswer,
   onResolveFlag,
   resolvingFlagId,
+  onReplyFlag,
   disabled,
   applicationData,
 }: SectionBlockProps) {
@@ -632,7 +664,7 @@ function SectionBlock({
   const outcome = evaluateNode(node, criteriaByLevelId, responsesByLevelId);
 
   return (
-    <div className={styles.section}>
+    <div className={styles.section} id={`level-${node.level.dnx_assessment_levelid}`}>
       <div
         className={`${styles.sectionHeader} ${expanded ? '' : styles.sectionHeaderCollapsed}`}
         onClick={() => setExpanded((v) => !v)}
@@ -672,12 +704,14 @@ function SectionBlock({
               onAnswer={onAnswer}
               onResolveFlag={onResolveFlag}
               resolvingFlagId={resolvingFlagId}
+              onReplyFlag={onReplyFlag}
               disabled={disabled}
             />
           ))}
-          {subsections.map((sub) => (
+          {subsections.map((sub, i) => (
             <SubsectionBlock
               key={sub.level.dnx_assessment_levelid}
+              index={i + 1}
               node={sub}
               levelsById={levelsById}
               responsesByLevelId={responsesByLevelId}
@@ -687,6 +721,7 @@ function SectionBlock({
               onAnswer={onAnswer}
               onResolveFlag={onResolveFlag}
               resolvingFlagId={resolvingFlagId}
+              onReplyFlag={onReplyFlag}
               disabled={disabled}
               applicationData={applicationData}
             />
@@ -697,9 +732,13 @@ function SectionBlock({
   );
 }
 
-interface SubsectionBlockProps extends SectionBlockProps {}
+interface SubsectionBlockProps extends SectionBlockProps {
+  /** 1-based position among sibling subsections — shown as the index badge. */
+  index: number;
+}
 
 function SubsectionBlock({
+  index,
   node,
   levelsById,
   responsesByLevelId,
@@ -709,6 +748,7 @@ function SubsectionBlock({
   onAnswer,
   onResolveFlag,
   resolvingFlagId,
+  onReplyFlag,
   disabled,
   applicationData,
 }: SubsectionBlockProps) {
@@ -734,6 +774,22 @@ function SubsectionBlock({
         }}
         aria-expanded={expanded}
       >
+        <span className={styles.subIndex}>{index}</span>
+        <span className={styles.subTitleBlock}>
+          <span className={styles.subsectionTitle}>{node.level.dnx_name}</span>
+          {node.level.dnx_description && (
+            <span className={styles.subSubtitle}>{node.level.dnx_description}</span>
+          )}
+        </span>
+        {outcome.kind === 'pass' || outcome.kind === 'fail' ? (
+          <OutcomeChip outcome={outcome} />
+        ) : counts.visible > 0 && counts.answered === counts.visible ? (
+          <span className={`${styles.subStatus} ${styles.subStatusDone}`}>Complete</span>
+        ) : counts.visible > 0 ? (
+          <span className={`${styles.subStatus} ${styles.subStatusPartial}`}>
+            {counts.answered} of {counts.visible} required
+          </span>
+        ) : null}
         <button
           type="button"
           className={styles.chevronBtn}
@@ -745,13 +801,6 @@ function SubsectionBlock({
         >
           {expanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
         </button>
-        <span className={styles.subsectionBullet} aria-hidden />
-        <span className={styles.subsectionLabel}>Subsection</span>
-        <span className={styles.subsectionTitle}>{node.level.dnx_name}</span>
-        <OutcomeChip outcome={outcome} />
-        <span className={styles.subsectionLabel}>
-          {counts.answered}/{counts.visible}
-        </span>
       </div>
       {expanded && (
         <>
@@ -777,6 +826,7 @@ function SubsectionBlock({
                   onAnswer={onAnswer}
                   onResolveFlag={onResolveFlag}
                   resolvingFlagId={resolvingFlagId}
+                  onReplyFlag={onReplyFlag}
                   disabled={disabled}
                 />
               ))}
@@ -797,6 +847,7 @@ interface QuestionItemProps {
   onAnswer: (level: Dnx_assessment_levels, value: boolean | string | string[] | null) => void;
   onResolveFlag: (commentId: string) => void;
   resolvingFlagId: string | null;
+  onReplyFlag?: (levelId: string) => void;
   disabled: boolean;
 }
 
@@ -810,6 +861,7 @@ function QuestionItem({
   onAnswer,
   onResolveFlag,
   resolvingFlagId,
+  onReplyFlag,
   disabled,
 }: QuestionItemProps) {
   // Visibility gate — keep the QuestionRow mounted but animate it in/out.
@@ -840,6 +892,7 @@ function QuestionItem({
         flags={flags}
         onResolveFlag={onResolveFlag}
         resolvingFlagId={resolvingFlagId}
+        onReplyFlag={onReplyFlag ? () => onReplyFlag(levelId) : undefined}
         criteria={criteria}
       />
     </div>
